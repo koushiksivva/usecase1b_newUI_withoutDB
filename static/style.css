@@ -1,0 +1,148 @@
+body {
+    background-color: #b9cbc8;
+    color: #2f2f2f;
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.header {
+    background-color: #2867C5;
+    padding: 12px;
+    border-radius: 5px;
+    text-align: center;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: visible;
+}
+
+.logo-container {
+    padding: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+}
+
+.top-right-container {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    text-align: right;
+    z-index: 10;
+    padding: 5px;
+}
+
+.doc-btn {
+    /* background-color: #0078d4; */
+    color: white !important;
+    padding: 8px 15px;
+    border-radius: 5px;
+    text-decoration: none !important;
+    font-size: 14px;
+    font-weight: bold;
+    display: inline-block;
+    cursor: pointer;
+}
+
+.doc-btn:hover {
+    background-color: #005a9e;
+}
+
+.header-content {
+    padding: 10px;
+}
+
+.header h1 {
+    color: white;
+    font-size: 36px;
+    font-weight: bold;
+    margin: 0;
+}
+
+.header .subtext {
+    color: #FF8072;
+    font-size: 14px;
+    font-weight: bold;
+    margin-top: 4px;
+}
+
+.content {
+    background-color: #f8e1e3;
+    padding: 20px;
+    border-radius: 10px;
+    text-align: center;
+}
+
+input[type="file"] {
+    margin-bottom: 10px;
+    padding: 5px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+}
+
+button {
+    background-color: #e5b5b5;
+    color: #2f2f2f;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 10px;
+    font-size: 16px;
+    cursor: pointer;
+    margin-top: 10px;
+}
+
+button:hover {
+    background-color: #d49a9a;
+}
+
+.download-btn, .feedback-btn {
+    display: inline-block;
+    padding: 10px 20px;
+    border-radius: 5px;
+    text-decoration: none;
+    font-size: 16px;
+    font-weight: bold;
+    margin: 0 10px; /* Add horizontal spacing between buttons */
+}
+
+.download-btn {
+    background-color: #28a745;
+    color: white;
+}
+
+.download-btn:hover {
+    background-color: #218838;
+}
+
+.feedback-btn {
+    background-color: #0078d4;
+    color: white;
+}
+
+.feedback-btn:hover {
+    background-color: #005a9e;
+}
+
+.status {
+    margin-top: 10px;
+    color: #2f2f2f;
+}
+
+.download-feedback-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 10px;
+}
+
+.download-section, .feedback-section {
+    margin: 0 5px; /* Small spacing between the two sections */
+}
