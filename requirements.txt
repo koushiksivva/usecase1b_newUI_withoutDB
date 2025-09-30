@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+gunicorn
+python-dotenv
+pymongo
+langchain
+langchain-openai
+fuzzywuzzy
+pandas
+openpyxl
+tiktoken
+PyMuPDF
+backoff
+python-Levenshtein
+python-multipart
