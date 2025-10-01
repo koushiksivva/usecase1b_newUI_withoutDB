@@ -798,7 +798,7 @@ async def get_token_sessions(request: Request):
             })
         
         # Prepare user summary data for the detailed table
-        user_summary = {}
+        # user_summary = {}
         # if user['role'] == 'System Admin':
         #     # Admin sees all users
         #     for username, user_stats in user_token_stats.items():
@@ -918,3 +918,4 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
