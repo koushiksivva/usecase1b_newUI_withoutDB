@@ -561,27 +561,44 @@ async def dashboard_page(request: Request):
                 function displayTokenSummary(data) {
                     const summaryDiv = document.getElementById('tokenSummary');
                     
-                    // ALWAYS show user-specific data in detailed table
-                    const displayData = data.user_summary;
+                    // Get user role to determine display logic
+                    const userRole = data.user_role;
                     
-                    if (displayData && Object.keys(displayData).length > 0) {
+                    if (data.user_summary && Object.keys(data.user_summary).length > 0) {
                         let html = '<table>';
-                        html += '<tr><th>Username</th><th>File Name</th><th>Total Tokens</th><th>Total Processing Time</th><th>User Login Time</th></tr>';
                         
-                        for (const [username, stats] of Object.entries(displayData)) {
-                            html += `<tr>
-                                <td><strong>${username}</strong></td>
-                                <td>${stats.pdf_filename || 'Unknown'}</td>
-                                <td>${(stats.total_tokens || 0).toLocaleString()}</td>
-                                <td>${stats.total_response_time || 'N/A'}</td>
-                                <td>${stats.last_activity || 'Unknown'}</td>
-                            </tr>`;
+                        // Adjust table headers based on user role
+                        if (userRole === 'System Admin') {
+                            html += '<tr><th>Username</th><th>File Name</th><th>Total Tokens</th><th>Total Processing Time</th><th>User Login Time</th></tr>';
+                        } else {
+                            html += '<tr><th>Username</th><th>File Name</th><th>Total Tokens</th><th>Total Processing Time</th><th>User Login Time</th></tr>'; // ADDED Username column
+                        }
+                        
+                        // Show ALL sessions
+                        for (const [sessionKey, stats] of Object.entries(data.user_summary)) {
+                            if (userRole === 'System Admin') {
+                                html += `<tr>
+                                    <td><strong>${stats.username || 'Unknown'}</strong></td>
+                                    <td>${stats.pdf_filename || 'Unknown'}</td>
+                                    <td>${(stats.total_tokens || 0).toLocaleString()}</td>
+                                    <td>${stats.total_response_time || 'N/A'}</td>
+                                    <td>${stats.last_activity || 'Unknown'}</td>
+                                </tr>`;
+                            } else {
+                                html += `<tr>
+                                    <td><strong>${stats.username || 'Unknown'}</strong></td> <!-- ADDED Username cell -->
+                                    <td>${stats.pdf_filename || 'Unknown'}</td>
+                                    <td>${(stats.total_tokens || 0).toLocaleString()}</td>
+                                    <td>${stats.total_response_time || 'N/A'}</td>
+                                    <td>${stats.last_activity || 'Unknown'}</td>
+                                </tr>`;
+                            }
                         }
                         
                         html += '</table>';
                         summaryDiv.innerHTML = html;
                     } else {
-                        summaryDiv.innerHTML = '<p class="error">No token data available for your account. Process some PDF files to see usage statistics.</p>';
+                        summaryDiv.innerHTML = '<p class="error">No token data available. Process some PDF files to see usage statistics.</p>';
                     }
                 }
                 
@@ -740,7 +757,7 @@ async def get_token_summary(request: Request):
 
 @app.get("/api/token-sessions")
 async def get_token_sessions(request: Request):
-    """Get token usage session data for dashboard - returns individual session records"""
+    """Get token usage session data for dashboard - returns ALL session records"""
     user = get_current_user(request)
     
     try:
@@ -766,21 +783,23 @@ async def get_token_sessions(request: Request):
             'avg_tokens_per_file': avg_tokens_per_file
         }
         
+        # Get ALL sessions for the appropriate user scope
+        all_sessions = []
         if user['role'] == 'System Admin':
-            # Admin gets all sessions from all users
-            all_sessions = []
+            # Admin gets ALL sessions from ALL users
             for username, user_stats in user_token_stats.items():
-                all_sessions.extend(user_stats.get('processing_sessions', []))
+                user_sessions = user_stats.get('processing_sessions', [])
+                for session in user_sessions:
+                    all_sessions.append(session)
         else:
-            # Regular user gets only their own sessions
-            all_sessions = []
+            # Regular user gets ALL their own sessions
             if user['username'] in user_token_stats:
                 all_sessions = user_token_stats[user['username']].get('processing_sessions', [])
         
         # Sort sessions by timestamp (newest first)
         all_sessions.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
         
-        # Format the session data for display
+        # Format the session data for display - ALL sessions
         formatted_sessions = []
         for session in all_sessions:
             formatted_sessions.append({
@@ -797,64 +816,37 @@ async def get_token_sessions(request: Request):
                 'timestamp': session.get('timestamp', 0)
             })
         
-        # Prepare user summary data for the detailed table
+        # Prepare user summary data for the detailed table - show ALL sessions
         user_summary = {}
         if user['role'] == 'System Admin':
-            # Admin sees all users
+            # Admin sees ALL sessions from ALL users
             for username, user_stats in user_token_stats.items():
-                if user_stats.get('processing_sessions'):
-                    # Get the latest session for each user
-                    latest_session = max(user_stats['processing_sessions'], key=lambda x: x.get('timestamp', 0))
-                    user_summary[username] = {
-                        'pdf_filename': latest_session.get('pdf_filename', 'Unknown'),
-                        'total_tokens': user_stats.get('llm_input_tokens', 0) + user_stats.get('llm_output_tokens', 0) + user_stats.get('embedding_tokens', 0),
-                        'total_response_time': latest_session.get('formatted_total_time', 'N/A'),
-                        'last_activity': latest_session.get('login_time', 'Unknown')
+                sessions = user_stats.get('processing_sessions', [])
+                for session in sessions:
+                    # Create a unique key for each session to show all rows
+                    session_key = f"{username}_{session.get('timestamp', '')}"
+                    user_summary[session_key] = {
+                        'pdf_filename': session.get('pdf_filename', 'Unknown'),
+                        'total_tokens': session.get('total_tokens', 0),
+                        'total_response_time': session.get('formatted_total_time', 'N/A'),
+                        'last_activity': session.get('login_time', 'Unknown'),
+                        'username': username  # Include username for admin view
                     }
         else:
-            # Regular user sees only their own data
+            # Regular user sees ALL their own sessions
             if user['username'] in user_token_stats:
-                user_stats = user_token_stats[user['username']]
-                if user_stats.get('processing_sessions'):
-                    # Get all sessions for the user
-                    for session in user_stats['processing_sessions']:
-                        user_summary[user['username']] = {
-                            'pdf_filename': session.get('pdf_filename', 'Unknown'),
-                            'total_tokens': session.get('total_tokens', 0),
-                            'total_response_time': session.get('formatted_total_time', 'N/A'),
-                            'last_activity': session.get('login_time', 'Unknown')
-                        }
-        # # Prepare user summary data for the detailed table
-        # user_summary = {}
-        #     if user['role'] == 'System Admin':
-        #         # Admin sees all users and all their sessions
-        #         for username, user_stats in user_token_stats.items():
-        #             if user_stats.get('processing_sessions'):
-        #                 # Show ALL sessions for each user
-        #                 for session in user_stats['processing_sessions']:
-        #                     # Use a unique key by combining username and timestamp
-        #                     session_key = f"{username}_{session.get('timestamp', '')}"
-        #                     user_summary[session_key] = {
-        #                         'pdf_filename': session.get('pdf_filename', 'Unknown'),
-        #                         'total_tokens': session.get('total_tokens', 0),
-        #                         'total_response_time': session.get('formatted_total_time', 'N/A'),
-        #                         'last_activity': session.get('login_time', 'Unknown')
-        #                     }
-        #     else:
-        #         # Regular user sees all their own sessions
-        #         if user['username'] in user_token_stats:
-        #             user_stats = user_token_stats[user['username']]
-        #             if user_stats.get('processing_sessions'):
-        #                 # Show ALL sessions for the user
-        #                 for session in user_stats['processing_sessions']:
-        #                     session_key = f"{user['username']}_{session.get('timestamp', '')}"
-        #                     user_summary[session_key] = {
-        #                         'pdf_filename': session.get('pdf_filename', 'Unknown'),
-        #                         'total_tokens': session.get('total_tokens', 0),
-        #                         'total_response_time': session.get('formatted_total_time', 'N/A'),
-        #                         'last_activity': session.get('login_time', 'Unknown')
-        #                     }
- 
+                sessions = user_token_stats[user['username']].get('processing_sessions', [])
+                for session in sessions:
+                    # Create a unique key for each session to show all rows
+                    session_key = f"{user['username']}_{session.get('timestamp', '')}"
+                    user_summary[session_key] = {
+                        'pdf_filename': session.get('pdf_filename', 'Unknown'),
+                        'total_tokens': session.get('total_tokens', 0),
+                        'total_response_time': session.get('formatted_total_time', 'N/A'),
+                        'last_activity': session.get('login_time', 'Unknown'),
+                        'username': user['username']
+                    }
+        
         return JSONResponse({
             "sessions": formatted_sessions,
             "user_summary": user_summary,
@@ -865,7 +857,7 @@ async def get_token_sessions(request: Request):
     except Exception as e:
         logger.error(f"Error getting token sessions: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to get token session data")
-    
+        
 @app.get("/back-to-main")
 async def back_to_main(request: Request):
     """Redirect back to main landing page"""
@@ -918,5 +910,4 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
 
