@@ -965,7 +965,7 @@ def create_token_report_excel(username=None):
             session_rows = []
             
             if username:
-                # Specific user report
+                # Specific user report - get ALL sessions for this user
                 if username not in user_token_stats:
                     logger.warning(f"No token data found for user: {username}")
                     return None
@@ -973,17 +973,18 @@ def create_token_report_excel(username=None):
                 report_title = f"Token Usage Report - {username}"
                 logger.info(f"Found {len(user_sessions)} sessions for user {username}")
             else:
-                # All users report
+                # All users report - get ALL sessions from ALL users
                 user_sessions = []
-                for user_data in user_token_stats.values():
-                    user_sessions.extend(user_data['processing_sessions'])
+                for current_user, user_data in user_token_stats.items():
+                    user_sessions.extend(user_data.get('processing_sessions', []))
+                
                 report_title = "Token Usage Report - All Users"
                 logger.info(f"Found {len(user_sessions)} total sessions across {len(user_token_stats)} users")
             
+            # Include ALL sessions in the report
             for session in user_sessions:
                 total_tokens = session.get('total_tokens', 0)
                 
-                # Use proper field names and ensure we have actual data
                 session_rows.append({
                     "Username": session.get('username', 'Unknown'),
                     "File Name": session.get('pdf_filename', 'Unknown'),
@@ -992,10 +993,10 @@ def create_token_report_excel(username=None):
                     "User Login Time": session.get('login_time', 'Unknown')
                 })
         
-        # Create DataFrame with the correct column order
+        # Create DataFrame with ALL sessions
         sessions_df = pd.DataFrame(session_rows) if session_rows else pd.DataFrame(columns=[
-            "Username", "File Name", "Total Tokens", 
-            "Total Processing Time", "User Login Time"
+            "Username", "File Name", "Total Tokens", "Total Processing Time", 
+            "User Login Time"
         ])
         
         logger.info(f"Created DataFrame with {len(sessions_df)} rows")
@@ -1005,24 +1006,23 @@ def create_token_report_excel(username=None):
         
         try:
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                # Individual sessions sheet
+                # Individual sessions sheet with ALL data
                 sessions_df.to_excel(writer, index=False, sheet_name='Token Usage Report')
                 
                 # Get workbook and worksheet
                 workbook = writer.book
                 sessions_ws = writer.sheets['Token Usage Report']
                 
-                # Add summary sheet for all users (only for admin view)
+                # Add summary sheet for all users (existing)
                 if not username:
                     summary_data = get_user_token_summary()
                     summary_rows = []
-                    for username, stats in summary_data.items():
+                    for user_name, stats in summary_data.items():
                         summary_rows.append({
-                            "Username": username,
+                            "Username": user_name,
                             "Total Files Processed": stats['total_files_processed'],
                             "Total Tokens": stats['total_tokens'],
-                            "LLM Calls": stats['llm_calls'],
-                            "Total Response Time": stats['total_response_time'],  # Changed from Embedding Calls
+                            "Total Response Time": stats['total_response_time'],
                             "Last Activity": stats['last_activity']
                         })
                     
@@ -1040,12 +1040,12 @@ def create_token_report_excel(username=None):
                         cell.alignment = Alignment(horizontal='center')
                     
                     # Adjust column widths for summary sheet
-                    column_widths = [20, 15, 15, 12, 20, 20, 20]  # Adjusted widths for new column
-                    for col_idx, width in enumerate(column_widths, 1):
+                    summary_column_widths = [20, 15, 15, 20, 20]
+                    for col_idx, width in enumerate(summary_column_widths, 1):
                         summary_ws.column_dimensions[get_column_letter(col_idx)].width = width
                 
                 # Apply formatting to sessions sheet
-                header_fill = PatternFill(start_color="2867C5", end_color="2867C5", fill_type="solid")
+                header_fill = PatternFill(start_color="2867B5", end_color="2867B5", fill_type="solid")
                 header_font = Font(bold=True, color="FFFFFF")
                 
                 for cell in sessions_ws[1]:
@@ -1053,13 +1053,21 @@ def create_token_report_excel(username=None):
                     cell.font = header_font
                     cell.alignment = Alignment(horizontal='center')
                 
-                # Adjust column widths for sessions sheet
-                column_widths = [20, 40, 15, 20, 20, 20]  # Adjusted widths for new column order
-                for col_idx, width in enumerate(column_widths, 1):
+                # Adjust column widths for sessions sheet to accommodate all data
+                session_column_widths = [20, 40, 15, 20, 20]
+                for col_idx, width in enumerate(session_column_widths, 1):
                     sessions_ws.column_dimensions[get_column_letter(col_idx)].width = width
                 
+                # Reorder sheets for better organization (only for admin report)
+                if not username:
+                    # Order: User Summary, Token Usage Report
+                    workbook._sheets.sort(key=lambda ws: {
+                        'User Summary': 0,
+                        'Token Usage Report': 1
+                    }.get(ws.title, 2))
+            
             output.seek(0)
-            logger.info("Token report created successfully")
+            logger.info("Token report created successfully with all sessions")
             return output
             
         except Exception as excel_error:
