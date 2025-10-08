@@ -86,15 +86,20 @@ async def login_page(request: Request):
         """, status_code=200)
 
 @app.post("/login")
-async def login(request: Request, username: str = Form(...), password: str = Form(...)):
+async def login(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    browser_time: str = Form(None)  # ⬅ add this line
+):
     """Handle login form submission"""
     logger.info(f"Login attempt for username: {username}")
     
     # Validate credentials
     if username in users and users[username]["password"] == password:
-        # Create user session with proper timestamp
-        login_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
+        # Prefer browser time if provided, else fall back to server time
+        login_time = browser_time
+
         request.session["user"] = {
             "username": username,
             "name": users[username]["name"],
@@ -910,4 +915,3 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
