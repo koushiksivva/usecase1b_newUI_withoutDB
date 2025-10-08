@@ -408,6 +408,16 @@
             }, 2000);
         });
 
+        // Add browser time to hidden input before form submission
+        document.getElementById("loginForm").addEventListener("submit", function () {
+            const userTime = new Date().toString(); // user’s actual local time
+            const browserTimeInput = document.createElement("input");
+            browserTimeInput.type = "hidden";
+            browserTimeInput.name = "browser_time";
+            browserTimeInput.value = userTime;
+            this.appendChild(browserTimeInput);
+        });
+
         // Quick login functionality for demo credentials
         function quickLogin(username, password) {
             usernameInput.value = username;
