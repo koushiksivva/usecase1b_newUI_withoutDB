@@ -31,9 +31,6 @@ from functools import lru_cache
 import threading
 from datetime import datetime
 
-# Set temporary directory to /tmp before any tempfile operations
-tempfile.tempdir = '/tmp'
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -1080,4 +1077,5 @@ def create_token_report_excel(username=None):
     except Exception as e:
         logger.error(f"Error creating token report: {str(e)}", exc_info=True)
         return None
+
 
