@@ -19,6 +19,9 @@ from typing import Optional
 from pathlib import Path
 import time
 
+# Set temporary directory to /tmp before any tempfile operations
+tempfile.tempdir = '/tmp'
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -915,4 +918,5 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
