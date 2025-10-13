@@ -19,7 +19,6 @@ from typing import Optional
 from pathlib import Path
 import time
 
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -273,7 +272,7 @@ async def upload_pdf(
         if not all_tasks:
             raise HTTPException(status_code=400, detail="No valid tasks found to process")
 
-        batch_size = 15  # Increased batch size for fewer API calls
+        batch_size = 20  # Increased batch size for fewer API calls
         task_batches_split = [all_tasks[i:i + batch_size] for i in range(0, len(all_tasks), batch_size)]
 
         results = []
@@ -916,6 +915,3 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
-
-
