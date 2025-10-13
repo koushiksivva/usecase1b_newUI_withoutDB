@@ -23,7 +23,7 @@ import time
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler(), logging.FileHandler('app.log')]
+    handlers=logging.StreamHandler()
 )
 logger = logging.getLogger(__name__)
 from datetime import datetime
@@ -915,4 +915,5 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
