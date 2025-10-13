@@ -35,10 +35,7 @@ from datetime import datetime
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('app.log')
-    ]
+    handlers=logging.StreamHandler()
 )
 logger = logging.getLogger(__name__)
 
@@ -1077,3 +1074,4 @@ def create_token_report_excel(username=None):
     except Exception as e:
         logger.error(f"Error creating token report: {str(e)}", exc_info=True)
         return None
+
