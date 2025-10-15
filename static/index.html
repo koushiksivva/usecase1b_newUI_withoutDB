@@ -2255,7 +2255,8 @@
             // Send the actual request to backend immediately
             fetch('/upload', {
                 method: 'POST',
-                body: formData
+                body: formData,
+                credentials: "include"
             })
             .then(response => {
                 if (response.ok) {
@@ -2486,6 +2487,7 @@
     </script>
 </body>
 </html>
+
 
 
 
