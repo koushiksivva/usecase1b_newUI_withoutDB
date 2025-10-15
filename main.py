@@ -879,26 +879,22 @@ async def health_check():
 @app.middleware("http")
 async def check_session_validity(request: Request, call_next):
     """Middleware to check session validity"""
-    # Skip session check for login page and static files
-    if request.url.path in ["/login", "/static", "/health"] or request.url.path.startswith("/static/"):
+    # Skip session check for login page, static files, and API endpoints
+    if (request.url.path in ["/login", "/health"] or 
+        request.url.path.startswith("/static/") or
+        request.url.path.startswith("/api/")):
         return await call_next(request)
-    
     # Check if session exists and has user data
     user = request.session.get("user")
     if not user:
-        # If no user session and trying to access protected routes, redirect to login
-        if request.url.path not in ["/login", "/static", "/clear-session"] and not request.url.path.startswith("/static/"):
-            logger.info(f"Redirecting to login from {request.url.path} - no session")
-            return RedirectResponse(url="/login", status_code=302)
-    
+        logger.info(f"Redirecting to login from {request.url.path} - no session")
+        return RedirectResponse(url="/login", status_code=302)
     # Check session expiry if it exists
     expiry = request.session.get("expiry")
     if expiry and time.time() > expiry:
-        logger.info(f"Session expired for user: {user.get('username', 'Unknown') if user else 'Unknown'}")
+        logger.info(f"Session expired for user: {user.get('username', 'Unknown')}")
         request.session.clear()
-        if request.url.path not in ["/login", "/static"] and not request.url.path.startswith("/static/"):
-            return RedirectResponse(url="/login", status_code=302)
-    
+        return RedirectResponse(url="/login", status_code=302)
     response = await call_next(request)
     return response
 
@@ -915,9 +911,20 @@ app.add_middleware(
     https_only=False  # Set to True in production if using HTTPS
 )
 
+@app.get("/debug-session")
+async def debug_session(request: Request):
+    """Debug session information"""
+    return JSONResponse({
+        "session_exists": "user" in request.session,
+        "session_data": request.session.get("user"),
+        "session_keys": list(request.session.keys()),
+        "headers": dict(request.headers)
+    })
+
 if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
 
