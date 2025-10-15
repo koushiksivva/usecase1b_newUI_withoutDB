@@ -2240,38 +2240,58 @@
         }
 
         function processFile(file) {
+            // Add debug info
+            console.log('🔄 Starting file processing...', {
+                fileName: file.name,
+                fileSize: file.size,
+                fileType: file.type
+            });
             // Hide regenerate button and disable process button during processing
             regenerateButton.style.display = 'none';
             processButton.disabled = true;
-            
             // Show processing section
             processingSection.classList.add('show');
             resultsSection.classList.remove('show');
-            
             // Create FormData object
             const formData = new FormData();
             formData.append('file', file);
-            
-            // Send the actual request to backend immediately
+            // Add timeout handling
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minute timeout
             fetch('/upload', {
                 method: 'POST',
                 body: formData,
-                // credentials: "include"
+                signal: controller.signal,
+                redirect: 'manual'  // Handle redirects manually
             })
             .then(response => {
+                clearTimeout(timeoutId);
+                console.log('📡 Response received:', response.status, response.statusText, response.type);
+                // Check if response is a redirect (3xx status)
+                if (response.status >= 300 && response.status < 400) {
+                    console.error('Redirect detected during upload:', response.status);
+                    throw new Error('Session expired. Please login again.');
+                }
                 if (response.ok) {
                     return response.json();
-                } else if (response.status === 401) {
-                    // User not authenticated
-                    window.location.href = '/login';
-                    return;
                 } else {
+                    // Try to get error message from response
                     return response.text().then(text => {
-                        throw new Error(text || 'Failed to process file');
+                        console.error('❌ Server error response:', text);
+                        let errorMessage = `Server error: ${response.status}`;
+                        try {
+                            const errorData = JSON.parse(text);
+                            errorMessage = errorData.detail || errorMessage;
+                        } catch (e) {
+                            // If not JSON, use the text as is
+                            if (text) errorMessage = text;
+                        }
+                        throw new Error(errorMessage);
                     });
                 }
             })
             .then(data => {
+                console.log('✅ Processing completed successfully', data);
                 if (data && data.status === 'success') {
                     // Decode the Excel file from base64
                     const excelData = atob(data.file);
@@ -2283,34 +2303,42 @@
                         [byteArray],
                         { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
                     );
-                    
                     // Create download link
                     const url = window.URL.createObjectURL(excelBlob);
                     downloadExcel.href = url;
                     downloadExcel.download = data.filename || 'AI-Generated_SOW_Document.xlsx';
-                    
                     // Update UI with dynamic data from backend
                     updateResultsUI(data.metadata);
-                    
                     // Show regenerate button and re-enable process button after successful processing
                     regenerateButton.style.display = 'inline-flex';
                     processButton.disabled = false;
-                    
                     // Show results section
                     processingSection.classList.remove('show');
                     resultsSection.classList.add('show');
+                    console.log('🎉 UI updated successfully');
                 } else if (data) {
+                    console.error('❌ Processing failed:', data);
                     throw new Error(data.detail || 'Processing failed');
                 }
             })
             .catch(error => {
-                // Reset buttons on error
+                clearTimeout(timeoutId);
+                console.error('💥 Error during processing:', error);
+                // Enhanced error messages
+                let userMessage = 'Failed to process file';
+                if (error.name === 'AbortError') {
+                    userMessage = 'Request timed out. Please try again.';
+                } else if (error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
+                    userMessage = 'Network error. Please check your connection.';
+                } else if (error.message.includes('Session expired') || error.message.includes('login')) {
+                    userMessage = 'Your session has expired. Please refresh the page and login again.';
+                } else {
+                    userMessage = error.message || userMessage;
+                }
+                alert(`Error: ${userMessage}`);
+                // Reset UI
                 regenerateButton.style.display = 'none';
                 processButton.disabled = !currentFile;
-                
-                if (error.message !== undefined) {
-                    alert('Error: ' + error.message);
-                }
                 processingSection.classList.remove('show');
             });
         }
@@ -2487,6 +2515,7 @@
     </script>
 </body>
 </html>
+
 
 
 
