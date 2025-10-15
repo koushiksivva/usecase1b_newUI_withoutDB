@@ -908,7 +908,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Add session middleware with secret key
 app.add_middleware(
     SessionMiddleware,
-    secret_key=os.getenv("SESSION_SECRET", "your-secret-key-change-in-production")
+    secret_key=os.getenv("SESSION_SECRET", "your-secret-key-change-in-production"),
     max_age=None  # Keep session alive indefinitely
 )
 
@@ -916,4 +916,5 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
