@@ -1,425 +1,432 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Project Plan Agent</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        header {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            background-color: #ffffff;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            z-index: 60;
-            height: 60px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0 20px;
-        }
-        #hamburger {
-            font-size: 24px;
-            background: none;
-            border: none;
-            color: #1e40af;
-            cursor: pointer;
-            margin-right: 10px;
-        }
-        .logo {
-            display: flex;
-            align-items: center;
-        }
-        .user-info {
-            display: flex;
-            align-items: center;
-        }
-        .user-info .avatar {
-            margin-right: 10px;
-        }
-        #sidebar {
-            width: 250px;
-            background-color: #1e40af;
-            color: white;
-            position: fixed;
-            top: 60px;
-            left: -250px;
-            height: calc(100% - 60px);
-            padding: 20px;
-            transition: left 0.3s ease-in-out;
-            z-index: 50;
-            overflow-y: auto; /* Added to enable vertical scrolling */
-        }
-        .sidebar-open #sidebar {
-            left: 0;
-        }
-        main {
-            margin-top: 60px;
-            padding: 20px;
-            transition: margin-left 0.3s ease-in-out;
-            margin-left: 0;
-        }
-        .sidebar-open main {
-            margin-left: 250px;
-        }
-    </style>
-    <script>
-        let sidebarOpen = false;
-
-        async function loginUser(event) {
-            event.preventDefault();
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-            try {
-                const response = await fetch('/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
-                });
-                const result = await response.json();
-                if (result.status === 'success') {
-                    localStorage.setItem('session_id', result.session_id);
-                    localStorage.setItem('user_role', result.user_role);
-                    localStorage.setItem('user_email', result.user_email);
-                    localStorage.setItem('avatar_initials', result.avatar_initials);
-                    updateUI(result.user_role, result.user_email, username, result.avatar_initials);
-                } else {
-                    alert(result.detail || 'Login failed');
-                }
-            } catch (error) {
-                alert('Error: ' + error.message);
-            }
-        }
-
-        async function uploadFile(event) {
-            event.preventDefault();
-            const sessionId = localStorage.getItem('session_id');
-            const fileInput = document.getElementById('file-upload');
-            const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
-            try {
-                const response = await fetch('/upload', {
-                    method: 'POST',
-                    headers: { 'x-session-id': sessionId },
-                    body: formData
-                });
-                const result = await response.json();
-                if (result.status === 'success') {
-                    document.getElementById('upload-status').innerText = 'Processing complete! Download your report.';
-                    document.getElementById('download-sow').style.display = 'inline-block';
-                    document.getElementById('download-sow').href = `/download/${sessionId}/sow_report`;
-                } else {
-                    document.getElementById('upload-status').innerText = result.detail || 'Upload failed';
-                }
-            } catch (error) {
-                document.getElementById('upload-status').innerText = 'Error: ' + error.message;
-            }
-        }
-
-        async function refreshTokenPreview() {
-            const sessionId = localStorage.getItem('session_id');
-            const username = localStorage.getItem('user_email').split('@')[0];
-            try {
-                const response = await fetch(`/token-preview/${sessionId}`, {
-                    headers: { 'x-session-id': sessionId }
-                });
-                const result = await response.json();
-                if (result.status === 'success') {
-                    const tableBody = document.getElementById('token-preview-body');
-                    tableBody.innerHTML = '';
-                    const filteredData = result.data.filter(row => 
-                        localStorage.getItem('user_role') === 'admin' || row.Username === username
-                    );
-                    filteredData.forEach(row => {
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `
-                            <td class="px-4 py-2">${row.Email}</td>
-                            <td class="px-4 py-2">${row.Username}</td>
-                            <td class="px-4 py-2">${row['File Name']}</td>
-                            <td class="px-4 py-2">${row['Total Tokens']}</td>
-                            <td class="px-4 py-2">${row['User Login Time']}</td>
-                            <td class="px-4 py-2">${row['AI Response Time (minutes)']}</td>
-                            <td class="px-4 py-2">${row['User Logout Time']}</td>
-                        `;
-                        tableBody.appendChild(tr);
-                    });
-                    document.getElementById('download-token').href = `/download/${sessionId}/token_report`;
-                } else {
-                    alert(result.detail || 'Failed to load preview');
-                }
-            } catch (error) {
-                alert('Error: ' + error.message);
-            }
-        }
-
-        async function logoutUser() {
-            const sessionId = localStorage.getItem('session_id');
-            try {
-                await fetch(`/logout/${sessionId}`);
-                localStorage.clear();
-                showLogin();
-            } catch (error) {
-                alert('Error: ' + error.message);
-            }
-        }
-
-        function updateUI(role, email, username) {
-            document.getElementById('login-section').style.display = 'none';
-            document.getElementById('main-section').style.display = 'block';
-            document.getElementById('user-email').innerText = email;
-            // document.getElementById('user-role').innerText = role === 'admin' ? 'Admin' : 'Project Manager';
-            document.getElementById('user-role').innerText = role.charAt(0).toUpperCase() + role.slice(1).replace('_', ' '); // getting the live role name
-            document.getElementById('upload-section').style.display = 'block'; // Show upload section for all roles
-            if (role === 'admin') {
-                // document.getElementById('upload-section').style.display = 'none'; // Show upload section for all roles we have to hide it for admin
-                document.getElementById('admin-section').style.display = 'block';
-                document.getElementById('download-token').href = `/download/${localStorage.getItem('session_id')}/token_report`;
-            } else {
-                //document.getElementById('upload-section').style.display = 'block';// Show upload section for all roles we have to hide it for admin
-                document.getElementById('admin-section').style.display = 'none';
-            }
-        }
-
-        function showLogin() {
-            document.getElementById('login-section').style.display = 'block';
-            document.getElementById('main-section').style.display = 'none';
-        }
-
-        function toggleSidebar() {
-            sidebarOpen = !sidebarOpen;
-            document.body.classList.toggle('sidebar-open', sidebarOpen);
-            const hamburger = document.getElementById('hamburger');
-            hamburger.textContent = sidebarOpen ? '✖' : '☰';
-        }
-
-        window.onload = () => {
-            const sessionId = localStorage.getItem('session_id');
-            if (sessionId) {
-                fetch(`/user-info/${sessionId}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        updateUI(data.role, data.email, data.username, localStorage.getItem('avatar_initials') || data.username[0].upper()); // Fallback to username initial
-                    })
-                    .catch(error => {
-                        console.error('Error fetching user info:', error);
-                        showLogin();
-                    });
-            } else {
-                showLogin();
-            }
-            document.getElementById('hamburger').addEventListener('click', toggleSidebar);
-        };
-    </script>
-</head>
-<body class="bg-gray-100 font-sans">
-    <!-- Login Section -->
-    <section id="login-section" class="min-h-screen flex items-center justify-center">
-        <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-md mx-auto">
+   <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Project Plan Agent</title>
+      <link rel="stylesheet" href="/static/style.css">
+      <script src="https://cdn.tailwindcss.com"></script>
+      <style>
+         header {
+         position: fixed;
+         top: 0;
+         left: 0;
+         width: 100%;
+         background-color: #ffffff;
+         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+         z-index: 60;
+         height: 60px;
+         display: flex;
+         justify-content: space-between;
+         align-items: center;
+         padding: 0 20px;
+         }
+         #hamburger {
+         font-size: 24px;
+         background: none;
+         border: none;
+         color: #1e40af;
+         cursor: pointer;
+         margin-right: 10px;
+         }
+         .logo {
+         display: flex;
+         align-items: center;
+         }
+         .user-info {
+         display: flex;
+         align-items: center;
+         }
+         .user-info .avatar {
+         margin-right: 10px;
+         }
+         #sidebar {
+         width: 250px;
+         background-color: #1e40af;
+         color: white;
+         position: fixed;
+         top: 60px;
+         left: -250px;
+         height: calc(100% - 60px);
+         padding: 20px;
+         transition: left 0.3s ease-in-out;
+         z-index: 50;
+         overflow-y: auto; /* Added to enable vertical scrolling */
+         }
+         .sidebar-open #sidebar {
+         left: 0;
+         }
+         main {
+         margin-top: 60px;
+         padding: 20px;
+         transition: margin-left 0.3s ease-in-out;
+         margin-left: 0;
+         }
+         .sidebar-open main {
+         margin-left: 250px;
+         }
+      </style>
+      <script>
+         let sidebarOpen = false;
+         
+         async function loginUser(event) {
+             event.preventDefault();
+             const username = document.getElementById('username').value;
+             const password = document.getElementById('password').value;
+             try {
+                 const response = await fetch('/login', {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ username, password })
+                 });
+                 const result = await response.json();
+                 if (result.status === 'success') {
+                     localStorage.setItem('session_id', result.session_id);
+                     localStorage.setItem('user_role', result.user_role);
+                     localStorage.setItem('user_email', result.user_email);
+                     localStorage.setItem('avatar_initials', result.avatar_initials);
+                     updateUI(result.user_role, result.user_email, username, result.avatar_initials);
+                 } else {
+                     alert(result.detail || 'Login failed');
+                 }
+             } catch (error) {
+                 alert('Error: ' + error.message);
+             }
+         }
+         
+         async function uploadFile(event) {
+             event.preventDefault();
+             const sessionId = localStorage.getItem('session_id');
+             const fileInput = document.getElementById('file-upload');
+             const formData = new FormData();
+             formData.append('file', fileInput.files[0]);
+             try {
+                 const response = await fetch('/upload', {
+                     method: 'POST',
+                     headers: { 'x-session-id': sessionId },
+                     body: formData
+                 });
+                 const result = await response.json();
+                 if (result.status === 'success') {
+                     document.getElementById('upload-status').innerText = 'Processing complete! Download your report.';
+                     document.getElementById('download-sow').style.display = 'inline-block';
+                     document.getElementById('download-sow').href = `/download/${sessionId}/sow_report`;
+                 } else {
+                     document.getElementById('upload-status').innerText = result.detail || 'Upload failed';
+                 }
+             } catch (error) {
+                 document.getElementById('upload-status').innerText = 'Error: ' + error.message;
+             }
+         }
+         
+         async function refreshTokenPreview() {
+             const sessionId = localStorage.getItem('session_id');
+             const username = localStorage.getItem('user_email').split('@')[0];  // As per your original code
+             const userRole = localStorage.getItem('user_role');
+             try {
+                 const response = await fetch(`/api/token-sessions`, {
+                     headers: { 'x-session-id': sessionId }  // If your backend requires it; otherwise remove
+                 });
+                 if (!response.ok) {
+                     throw new Error(`HTTP error! status: ${response.status}`);
+                 }
+                 const result = await response.json();
+                 const tableBody = document.getElementById('token-preview-body');
+                 tableBody.innerHTML = '';
+                 // Filter sessions based on role (admin sees all, others see only their own)
+                 const filteredData = result.sessions.filter(row => 
+                     userRole === 'admin' || row.username === username
+                 );
+                 if (filteredData.length === 0) {
+                     tableBody.innerHTML = '<tr><td colspan="7" class="text-center py-4">No data available.</td></tr>';
+                     return;
+                 }
+                 filteredData.forEach(row => {
+                     const tr = document.createElement('tr');
+                     tr.innerHTML = `
+         <td class="px-4 py-2">${row.email || 'N/A'}</td>  <!-- Use row.email from backend -->
+         <td class="px-4 py-2">${row.username || 'N/A'}</td>
+         <td class="px-4 py-2">${row.pdf_filename || 'N/A'}</td>
+         <td class="px-4 py-2">${row.total_tokens || 0}</td>
+         <td class="px-4 py-2">${row.login_time || 'N/A'}</td>
+         <td class="px-4 py-2">${row.formatted_total_time || 'N/A'}</td>  <!-- Matches your backend's formatted AI/total time -->
+         <td class="px-4 py-2">${row.logout_time || 'N/A'}</td>
+                     `;
+                     tableBody.appendChild(tr);
+                 });
+                 // Update download link (if needed)
+                 document.getElementById('download-token').href = `/download/${sessionId}/token_report`;
+             } catch (error) {
+                 console.error('Error loading token preview:', error);
+                 const tableBody = document.getElementById('token-preview-body');
+                 tableBody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-red-600">Failed to load data. Please try again later.</td></tr>';
+                 // No alert() here - error is shown in the table instead of a popup
+             }
+         }
+         async function logoutUser() {
+             const sessionId = localStorage.getItem('session_id');
+             try {
+                 await fetch(`/logout/${sessionId}`);
+                 localStorage.clear();
+                 showLogin();
+             } catch (error) {
+                 alert('Error: ' + error.message);
+             }
+         }
+         
+         function updateUI(role, email, username) {
+             document.getElementById('login-section').style.display = 'none';
+             document.getElementById('main-section').style.display = 'block';
+             document.getElementById('user-email').innerText = email;
+             // document.getElementById('user-role').innerText = role === 'admin' ? 'Admin' : 'Project Manager';
+             document.getElementById('user-role').innerText = role.charAt(0).toUpperCase() + role.slice(1).replace('_', ' '); // getting the live role name
+             document.getElementById('upload-section').style.display = 'block'; // Show upload section for all roles
+             if (role === 'admin') {
+                 // document.getElementById('upload-section').style.display = 'none'; // Show upload section for all roles we have to hide it for admin
+                 document.getElementById('admin-section').style.display = 'block';
+                 document.getElementById('download-token').href = `/download/${localStorage.getItem('session_id')}/token_report`;
+             } else {
+                 //document.getElementById('upload-section').style.display = 'block';// Show upload section for all roles we have to hide it for admin
+                 document.getElementById('admin-section').style.display = 'none';
+             }
+         }
+         
+         function showLogin() {
+             document.getElementById('login-section').style.display = 'block';
+             document.getElementById('main-section').style.display = 'none';
+         }
+         
+         function toggleSidebar() {
+             sidebarOpen = !sidebarOpen;
+             document.body.classList.toggle('sidebar-open', sidebarOpen);
+             const hamburger = document.getElementById('hamburger');
+             hamburger.textContent = sidebarOpen ? '✖' : '☰';
+         }
+         
+         window.onload = () => {
+             const sessionId = localStorage.getItem('session_id');
+             if (sessionId) {
+                 fetch(`/user-info/${sessionId}`)
+                     .then(response => response.json())
+                     .then(data => {
+                         updateUI(data.role, data.email, data.username, localStorage.getItem('avatar_initials') || data.username[0].upper()); // Fallback to username initial
+                     })
+                     .catch(error => {
+                         console.error('Error fetching user info:', error);
+                         showLogin();
+                     });
+             } else {
+                 showLogin();
+             }
+             document.getElementById('hamburger').addEventListener('click', toggleSidebar);
+         };
+      </script>
+   </head>
+   <body class="bg-gray-100 font-sans">
+      <!-- Login Section -->
+      <section id="login-section" class="min-h-screen flex items-center justify-center">
+         <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-md mx-auto">
             <div class="flex items-center justify-center mb-6">
-                <span class="text-3xl font-bold text-blue-600">N</span>
-                <div class="ml-2">
-                    <h1 class="text-xl font-bold text-gray-800">NTT DATA</h1>
-                    <p class="text-sm text-gray-600">Enterprise AI Platform</p>
-                </div>
+               <span class="text-3xl font-bold text-blue-600">N</span>
+               <div class="ml-2">
+                  <h1 class="text-xl font-bold text-gray-800">NTT DATA</h1>
+                  <p class="text-sm text-gray-600">Enterprise AI Platform</p>
+               </div>
             </div>
             <h2 class="text-2xl font-semibold text-gray-800 mb-2 text-center">🔐 User Login</h2>
             <p class="text-sm text-gray-600 mb-6 text-center">Please enter your credentials to continue</p>
             <form onsubmit="loginUser(event)">
-                <div class="mb-4">
-                    <label for="username" class="block text-sm font-medium text-gray-700">Username:</label>
-                    <input id="username" type="text" class="w-full p-2 border rounded-md" required>
-                </div>
-                <div class="mb-4">
-                    <label for="password" class="block text-sm font-medium text-gray-700">Password:</label>
-                    <input id="password" type="password" class="w-full p-2 border rounded-md" required>
-                </div>
-                <button type="submit" class="w-full bg-blue-600 text-white p-2 rounded-md hover:bg-blue-700">Login</button>
+               <div class="mb-4">
+                  <label for="username" class="block text-sm font-medium text-gray-700">Username:</label>
+                  <input id="username" type="text" class="w-full p-2 border rounded-md" required>
+               </div>
+               <div class="mb-4">
+                  <label for="password" class="block text-sm font-medium text-gray-700">Password:</label>
+                  <input id="password" type="password" class="w-full p-2 border rounded-md" required>
+               </div>
+               <button type="submit" class="w-full bg-blue-600 text-white p-2 rounded-md hover:bg-blue-700">Login</button>
             </form>
             <div class="mt-4 text-sm text-gray-600">
-                <p><strong>Test Users:</strong></p>
-                <ul class="list-disc pl-5">
-                    <li>Admin: admin / adminpass (admin@nttdata.com)</li>
-                    <li>User 1: user1 / userpass (user1@nttdata.com)</li>
-                    <li>User 2: user2 / userpass (user2@nttdata.com)</li>
-                </ul>
+               <p><strong>Test Users:</strong></p>
+               <ul class="list-disc pl-5">
+                  <li>Admin: admin / adminpass (admin@nttdata.com)</li>
+                  <li>User 1: user1 / userpass (user1@nttdata.com)</li>
+                  <li>User 2: user2 / userpass (user2@nttdata.com)</li>
+               </ul>
             </div>
-        </div>
-    </section>
-
-    <!-- Main Section -->
-    <section id="main-section" class="min-h-screen">
-        <!-- Fixed Header -->
-        <header>
+         </div>
+      </section>
+      <!-- Main Section -->
+      <section id="main-section" class="min-h-screen">
+         <!-- Fixed Header -->
+         <header>
             <div class="flex items-center">
-                <button id="hamburger" class="text-2xl p-2">☰</button>
-                <div class="logo">
-                    <span class="text-3xl font-bold text-blue-600">N</span>
-                    <div class="ml-2">
-                        <h1 class="text-xl font-bold text-gray-800">NTT DATA</h1>
-                        <p class="text-sm text-gray-600">AI Platform</p>
-                    </div>
-                </div>
+               <button id="hamburger" class="text-2xl p-2">☰</button>
+               <div class="logo">
+                  <span class="text-3xl font-bold text-blue-600">N</span>
+                  <div class="ml-2">
+                     <h1 class="text-xl font-bold text-gray-800">NTT DATA</h1>
+                     <p class="text-sm text-gray-600">AI Platform</p>
+                  </div>
+               </div>
             </div>
             <div class="user-info">
-                <div class="avatar">
-                    <span class="text-2xl font-bold bg-gray-200 text-gray-800 w-10 h-10 flex items-center justify-center rounded-full" id="avatar-initials">JD</span>
-                </div>
-                <div>
-                    <p id="user-email" class="text-sm font-semibold"></p>
-                    <p id="user-role" class="text-xs"></p>
-                </div>
+               <div class="avatar">
+                  <span class="text-2xl font-bold bg-gray-200 text-gray-800 w-10 h-10 flex items-center justify-center rounded-full" id="avatar-initials">JD</span>
+               </div>
+               <div>
+                  <p id="user-email" class="text-sm font-semibold"></p>
+                  <p id="user-role" class="text-xs"></p>
+               </div>
             </div>
-        </header>
-
-        <!-- Sidebar -->
-        <aside id="sidebar" class="p-6 text-white">
+         </header>
+         <!-- Sidebar -->
+         <aside id="sidebar" class="p-6 text-white">
             <nav>
-                <h3 class="text-xs font-semibold uppercase mb-2">Main</h3>
-                <ul class="space-y-2">
-                    <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded" onclick="document.getElementById('upload-section').style.display='none';document.getElementById('admin-section').style.display='none';"><span class="mr-2">🏠</span> Dashboard</a></li>
-                    <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded" onclick="document.getElementById('admin-section').style.display='block';document.getElementById('upload-section').style.display='none';refreshTokenPreview();"><span class="mr-2">📊</span> Project Analytics</a></li>
-                    <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded" onclick="document.getElementById('upload-section').style.display='block';document.getElementById('admin-section').style.display='none';"><span class="mr-2">📁</span> File Manager</a></li>
-                </ul>
-                <h3 class="text-xs font-semibold uppercase mt-4 mb-2">Resources</h3>
-                <ul class="space-y-2">
-                    <li><a href="https://itellicloud-my.sharepoint.com/:b:/g/personal/kausthub_k_bs_nttdata_com/EbWSCMS1ipJOi5TCMRRkyvgBgrYT-VBNebmZIjZTt83ldA?e=J1WMRe" target="_blank" rel="noopener noreferrer" class="doc-btn">
-                        📖 User Documentation</a>
-                    </li>
-                    <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">🔧</span> API Reference</a></li>
-                    <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">🎓</span> Training Materials</a></li>
-                    <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">📋</span> Release Notes <span class="ml-1 bg-red-500 text-xs px-1 rounded">New</span></a></li>
-                </ul>
-                <h3 class="text-xs font-semibold uppercase mt-4 mb-2">Support</h3>
-                <ul class="space-y-2">
-                    <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">💬</span> Contact Support</a></li>
-                    <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">❓</span> Help Center</a></li>
-                    <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">📊</span> System Status</a></li>
-                    <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">🎫</span> Submit Ticket</a></li>
-                </ul>
-                <h3 class="text-xs font-semibold uppercase mt-4 mb-2">Account</h3>
-                <ul class="space-y-2">
-                    <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">⚙️</span> Settings</a></li>
-                    <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">👤</span> Profile</a></li>
-                    <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">🔐</span> Security</a></li>
-                    <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">ℹ️</span> About</a></li>
-                    <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded" onclick="logoutUser()"><span class="mr-2">🚪</span> Logout</a></li>
-                </ul>
+               <h3 class="text-xs font-semibold uppercase mb-2">Main</h3>
+               <ul class="space-y-2">
+                  <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded" onclick="document.getElementById('upload-section').style.display='none';document.getElementById('admin-section').style.display='none';"><span class="mr-2">🏠</span> Dashboard</a></li>
+                  <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded" onclick="document.getElementById('admin-section').style.display='block';document.getElementById('upload-section').style.display='none';refreshTokenPreview();"><span class="mr-2">📊</span> Project Analytics</a></li>
+                  <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded" onclick="document.getElementById('upload-section').style.display='block';document.getElementById('admin-section').style.display='none';"><span class="mr-2">📁</span> File Manager</a></li>
+               </ul>
+               <h3 class="text-xs font-semibold uppercase mt-4 mb-2">Resources</h3>
+               <ul class="space-y-2">
+                  <li><a href="https://itellicloud-my.sharepoint.com/:b:/g/personal/kausthub_k_bs_nttdata_com/EbWSCMS1ipJOi5TCMRRkyvgBgrYT-VBNebmZIjZTt83ldA?e=J1WMRe" target="_blank" rel="noopener noreferrer" class="doc-btn">
+                     📖 User Documentation</a>
+                  </li>
+                  <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">🔧</span> API Reference</a></li>
+                  <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">🎓</span> Training Materials</a></li>
+                  <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">📋</span> Release Notes <span class="ml-1 bg-red-500 text-xs px-1 rounded">New</span></a></li>
+               </ul>
+               <h3 class="text-xs font-semibold uppercase mt-4 mb-2">Support</h3>
+               <ul class="space-y-2">
+                  <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">💬</span> Contact Support</a></li>
+                  <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">❓</span> Help Center</a></li>
+                  <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">📊</span> System Status</a></li>
+                  <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">🎫</span> Submit Ticket</a></li>
+               </ul>
+               <h3 class="text-xs font-semibold uppercase mt-4 mb-2">Account</h3>
+               <ul class="space-y-2">
+                  <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">⚙️</span> Settings</a></li>
+                  <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">👤</span> Profile</a></li>
+                  <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">🔐</span> Security</a></li>
+                  <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">ℹ️</span> About</a></li>
+                  <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded" onclick="logoutUser()"><span class="mr-2">🚪</span> Logout</a></li>
+               </ul>
             </nav>
-        </aside>
-        <!-- Main Content -->
-        <main class="flex-1 p-8">
+         </aside>
+         <!-- Main Content -->
+         <main class="flex-1 p-8">
             <nav class="text-sm text-gray-600 mb-4">
-                <a href="#" class="hover:text-blue-600">Home</a> ›
-                <a href="#" class="hover:text-blue-600">AI Tools</a> ›
-                <span class="text-gray-800">Project Plan Agent</span>
+               <a href="#" class="hover:text-blue-600">Home</a> ›
+               <a href="#" class="hover:text-blue-600">AI Tools</a> ›
+               <span class="text-gray-800">Project Plan Agent</span>
             </nav>
             <section class="mb-8">
-                <div class="flex items-center mb-2">
-                    <span class="text-2xl mr-2">🤖</span>
-                    <span class="text-sm text-blue-600">AI-Powered • RISE Project Initiative</span>
-                </div>
-                <h1 class="text-3xl font-bold text-gray-800">Project Plan Agent</h1>
-                <p class="text-gray-600 mt-2">Transform your Statement of Work into comprehensive project plans with intelligent AI analysis. Generate timelines, identify risks, and optimize resource allocation automatically.</p>
-                <div class="flex space-x-4 mt-4">
-                    <div class="text-center">
-                        <p class="text-2xl font-semibold text-gray-800">247</p>
-                        <p class="text-sm text-gray-600">Projects Processed</p>
-                    </div>
-                    <div class="text-center">
-                        <p class="text-2xl font-semibold text-gray-800">95%</p>
-                        <p class="text-sm text-gray-600">Accuracy Rate</p>
-                    </div>
-                    <div class="text-center">
-                        <p class="text-2xl font-semibold text-gray-800">67h</p>
-                        <p class="text-sm text-gray-600">Time Saved</p>
-                    </div>
-                </div>
+               <div class="flex items-center mb-2">
+                  <span class="text-2xl mr-2">🤖</span>
+                  <span class="text-sm text-blue-600">AI-Powered • RISE Project Initiative</span>
+               </div>
+               <h1 class="text-3xl font-bold text-gray-800">Project Plan Agent</h1>
+               <p class="text-gray-600 mt-2">Transform your Statement of Work into comprehensive project plans with intelligent AI analysis. Generate timelines, identify risks, and optimize resource allocation automatically.</p>
+               <div class="flex space-x-4 mt-4">
+                  <div class="text-center">
+                     <p class="text-2xl font-semibold text-gray-800">247</p>
+                     <p class="text-sm text-gray-600">Projects Processed</p>
+                  </div>
+                  <div class="text-center">
+                     <p class="text-2xl font-semibold text-gray-800">95%</p>
+                     <p class="text-sm text-gray-600">Accuracy Rate</p>
+                  </div>
+                  <div class="text-center">
+                     <p class="text-2xl font-semibold text-gray-800">67h</p>
+                     <p class="text-sm text-gray-600">Time Saved</p>
+                  </div>
+               </div>
             </section>
-
             <!-- Upload Section -->
             <section id="upload-section" class="bg-white p-6 rounded-lg shadow-md mb-8">
-                <div class="flex items-center mb-4">
-                    <h2 class="text-xl font-semibold text-gray-800">Upload Statement of Work</h2>
-                    <span class="ml-2 text-gray-600">❓</span>
-                </div>
-                <div class="border-2 border-dashed border-gray-300 p-6 rounded-lg text-center">
-                    <span class="text-2xl">📄</span>
-                    <p class="text-gray-600 mt-2">Drop your SOW document here or choose from your device</p>
-                    <div class="mt-4 flex justify-center space-x-4">
-                        <label class="bg-blue-600 text-white px-4 py-2 rounded-md cursor-pointer hover:bg-blue-700">
-                            📁 Browse Files
-                            <input id="file-upload" type="file" accept=".pdf" class="hidden" onchange="document.getElementById('file-name').innerText = this.files[0]?.name || ''">
-                        </label>
-                        <button class="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300">🔗 Import from URL</button>
-                    </div>
-                    <div class="mt-4 flex items-center justify-center">
-                        <span id="file-name" class="text-gray-600">• Ready to process</span>
-                        <button class="ml-2 text-gray-600 hover:text-red-600" onclick="document.getElementById('file-upload').value='';document.getElementById('file-name').innerText='• Ready to process'">✕</button>
-                    </div>
-                </div>
-                <div class="mt-6">
-                    <button class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700" onclick="uploadFile(event)">🚀 Analyze and Generate Project Plan</button>
-                    <p id="upload-status" class="mt-2 text-gray-600"></p>
-                    <div class="mt-4 flex justify-center space-x-4">
-                        <a id="download-sow" href="#" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 hidden">📄 Download SOW Report</a>
-                        <a href="https://forms.microsoft.com/e/ngwFzP8MrG" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700" target="_blank">📝 Submit Feedback</a>
-                    </div>
-                </div>
-                <div class="mt-6">
-                    <h3 class="text-lg font-semibold text-gray-800">Supported Document Formats</h3>
-                    <div class="flex space-x-4 mt-2">
-                        <div class="text-center">
-                            <span class="text-2xl">📄</span>
-                            <p class="text-sm text-gray-600">PDF Documents</p>
-                        </div>
-                        <div class="text-center">
-                            <span class="text-2xl">📝</span>
-                            <p class="text-sm text-gray-600">Word Documents</p>
-                        </div>
-                        <div class="text-center">
-                            <span class="text-2xl">📊</span>
-                            <p class="text-sm text-gray-600">Excel Sheets</p>
-                        </div>
-                        <div class="text-center">
-                            <span class="text-2xl">📋</span>
-                            <p class="text-sm text-gray-600">Text Files</p>
-                        </div>
-                    </div>
-                </div>
+               <div class="flex items-center mb-4">
+                  <h2 class="text-xl font-semibold text-gray-800">Upload Statement of Work</h2>
+                  <span class="ml-2 text-gray-600">❓</span>
+               </div>
+               <div class="border-2 border-dashed border-gray-300 p-6 rounded-lg text-center">
+                  <span class="text-2xl">📄</span>
+                  <p class="text-gray-600 mt-2">Drop your SOW document here or choose from your device</p>
+                  <div class="mt-4 flex justify-center space-x-4">
+                     <label class="bg-blue-600 text-white px-4 py-2 rounded-md cursor-pointer hover:bg-blue-700">
+                     📁 Browse Files
+                     <input id="file-upload" type="file" accept=".pdf" class="hidden" onchange="document.getElementById('file-name').innerText = this.files[0]?.name || ''">
+                     </label>
+                     <button class="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300">🔗 Import from URL</button>
+                  </div>
+                  <div class="mt-4 flex items-center justify-center">
+                     <span id="file-name" class="text-gray-600">• Ready to process</span>
+                     <button class="ml-2 text-gray-600 hover:text-red-600" onclick="document.getElementById('file-upload').value='';document.getElementById('file-name').innerText='• Ready to process'">✕</button>
+                  </div>
+               </div>
+               <div class="mt-6">
+                  <button class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700" onclick="uploadFile(event)">🚀 Analyze and Generate Project Plan</button>
+                  <p id="upload-status" class="mt-2 text-gray-600"></p>
+                  <div class="mt-4 flex justify-center space-x-4">
+                     <a id="download-sow" href="#" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 hidden">📄 Download SOW Report</a>
+                     <a href="https://forms.microsoft.com/e/ngwFzP8MrG" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700" target="_blank">📝 Submit Feedback</a>
+                  </div>
+               </div>
+               <div class="mt-6">
+                  <h3 class="text-lg font-semibold text-gray-800">Supported Document Formats</h3>
+                  <div class="flex space-x-4 mt-2">
+                     <div class="text-center">
+                        <span class="text-2xl">📄</span>
+                        <p class="text-sm text-gray-600">PDF Documents</p>
+                     </div>
+                     <div class="text-center">
+                        <span class="text-2xl">📝</span>
+                        <p class="text-sm text-gray-600">Word Documents</p>
+                     </div>
+                     <div class="text-center">
+                        <span class="text-2xl">📊</span>
+                        <p class="text-sm text-gray-600">Excel Sheets</p>
+                     </div>
+                     <div class="text-center">
+                        <span class="text-2xl">📋</span>
+                        <p class="text-sm text-gray-600">Text Files</p>
+                     </div>
+                  </div>
+               </div>
             </section>
-
             <!-- Admin Section -->
             <section id="admin-section" class="bg-white p-6 rounded-lg shadow-md hidden">
-                <h2 class="text-xl font-semibold text-gray-800 mb-4">👨‍💼 Admin Dashboard</h2>
-                <p class="text-gray-600 mb-4">As an admin, you can view and download the comprehensive token usage reports. Uploading PDFs is disabled for admin accounts.</p>
-                <button class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 mb-4" onclick="refreshTokenPreview()">🔄 Refresh Preview</button>
-                <div class="overflow-x-auto">
-                    <table class="w-full border-collapse">
-                        <thead>
-                            <tr class="bg-blue-600 text-white">
-                                <th class="px-4 py-2">Email</th>
-                                <th class="px-4 py-2">Username</th>
-                                <th class="px-4 py-2">File Name</th>
-                                <th class="px-4 py-2">Total Tokens</th>
-                                <th class="px-4 py-2">User Login Time</th>
-                                <th class="px-4 py-2">AI Response Time (minutes)</th>
-                                <th class="px-4 py-2">User Logout Time</th>
-                            </tr>
-                        </thead>
-                        <tbody id="token-preview-body">
-                            <tr><td colspan="7" class="text-center py-4">No data available. Click refresh to load preview.</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div class="mt-4 flex justify-center space-x-4">
-                    <a id="download-token" href="#" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">📈 Download Token Report</a>
-                    <a href="https://forms.microsoft.com/e/ngwFzP8MrG" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700" target="_blank">📝 Submit Feedback</a>
-                </div>
+               <h2 class="text-xl font-semibold text-gray-800 mb-4">👨‍💼 Admin Dashboard</h2>
+               <p class="text-gray-600 mb-4">As an admin, you can view and download the comprehensive token usage reports. Uploading PDFs is disabled for admin accounts.</p>
+               <button class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 mb-4" onclick="refreshTokenPreview()">🔄 Refresh Preview</button>
+               <div class="overflow-x-auto">
+                  <table class="w-full border-collapse">
+                     <thead>
+                        <tr class="bg-blue-600 text-white">
+                           <th class="px-4 py-2">Email</th>
+                           <th class="px-4 py-2">Username</th>
+                           <th class="px-4 py-2">File Name</th>
+                           <th class="px-4 py-2">Total Tokens</th>
+                           <th class="px-4 py-2">User Login Time</th>
+                           <th class="px-4 py-2">Total Processing Time</th>
+                           <!-- Updated to match backend -->
+                           <th class="px-4 py-2">User Logout Time</th>
+                        </tr>
+                     </thead>
+                     <tbody id="token-preview-body">
+                        <tr>
+                           <td colspan="7" class="text-center py-4">No data available. Click refresh to load preview.</td>
+                        </tr>
+                     </tbody>
+                  </table>
+               </div>
+               <div class="mt-4 flex justify-center space-x-4">
+                  <a id="download-token" href="#" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">📈 Download Token Report</a>
+                  <a href="https://forms.microsoft.com/e/ngwFzP8MrG" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700" target="_blank">📝 Submit Feedback</a>
+               </div>
             </section>
-        </main>
-    </section>
-</body>
+         </main>
+      </section>
+   </body>
 </html>
