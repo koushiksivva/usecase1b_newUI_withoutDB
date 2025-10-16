@@ -23,7 +23,7 @@ import time
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler(), logging.FileHandler('app.log')]
+    handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
 from datetime import datetime
@@ -45,9 +45,6 @@ def get_current_user(request: Request):
     """Get current user from session, raise 401 if not authenticated"""
     user = request.session.get("user")
     if not user:
-        logger.info(f"Session data: {request.session}")
-        logger.info(f"Redirecting to login from {request.url.path} - no session")
-        logger.info(f"Popup in UI triggered due to session loss at {request.url.path}")
         raise HTTPException(status_code=401, detail="Not authenticated")
     return user
 
@@ -219,23 +216,11 @@ def get_initials(name: str) -> str:
     else:
         return "UN"
 
-@app.post("/status")
-async def get_process_status(request: Request):
-    """Endpoint to check the status of the background process"""
-    # Example: Return a mock status for now
-    return JSONResponse({"status": "running", "message": "Process is still running"})
-
 @app.post("/upload")
 async def upload_pdf(
     file: UploadFile = File(...),
     request: Request = None
 ):
-    """Handle PDF upload and processing"""
-    # Start a background task for long-running processing
-    task = BackgroundTask(process_pdf_task, file, request)
-    return JSONResponse({"status": "processing", "message": "File is being processed"}, background=task)
-
-async def process_pdf_task(file: UploadFile, request: Request):
     """Handle PDF upload and processing"""
     # Check authentication
     user = get_current_user(request)
@@ -412,7 +397,6 @@ async def process_pdf_task(file: UploadFile, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error processing PDF: {str(e)}")
-        logger.error(f"Detailed error during PDF processing: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to process PDF: {str(e)}")
     
 # NEW: Add function to count tasks per phase
@@ -924,8 +908,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Add session middleware with secret key
 app.add_middleware(
     SessionMiddleware,
-    secret_key=os.getenv("SESSION_SECRET", "your-secret-key-change-in-production"),
-    max_age=None  # Keep session alive indefinitely
+    secret_key=os.getenv("SESSION_SECRET", "your-secret-key-change-in-production")
 )
 
 if __name__ == "__main__":
