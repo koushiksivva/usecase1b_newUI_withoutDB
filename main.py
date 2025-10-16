@@ -23,7 +23,7 @@ import time
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler(), logging.FileHandler('app.log')]
+    handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
 from datetime import datetime
@@ -45,9 +45,6 @@ def get_current_user(request: Request):
     """Get current user from session, raise 401 if not authenticated"""
     user = request.session.get("user")
     if not user:
-        logger.info(f"Session data: {request.session}")
-        logger.info(f"Redirecting to login from {request.url.path} - no session")
-        logger.info(f"Popup in UI triggered due to session loss at {request.url.path}")
         raise HTTPException(status_code=401, detail="Not authenticated")
     return user
 
@@ -74,8 +71,7 @@ async def login_page(request: Request):
     except FileNotFoundError:
         logger.error("login.html file not found in static directory")
         # Return a basic login form if file is missing
-        return HTMLResponse(content="""
-        <!DOCTYPE html>
+        return HTMLResponse(content="""<!DOCTYPE html>
         <html>
         <head><title>Login</title></head>
         <body>
@@ -85,8 +81,7 @@ async def login_page(request: Request):
                 <button type="submit">Login</button>
             </form>
         </body>
-        </html>
-        """, status_code=200)
+        </html>""", status_code=200)
 
 @app.post("/login")
 async def login(
@@ -160,6 +155,29 @@ async def get_user_info(request: Request):
     user = get_current_user(request)
     return JSONResponse(user)
 
+@app.get("/api/session-check")
+async def session_check(request: Request):
+    """Check if session is valid"""
+    user = request.session.get("user")
+    if user:
+        return JSONResponse({
+            "status": "valid", 
+            "user": user,
+            "expiry": request.session.get("expiry")
+        })
+    else:
+        return JSONResponse({"status": "invalid"}, status_code=401)
+
+@app.get("/api/debug-session")
+async def debug_session(request: Request):
+    """Debug endpoint to check session state"""
+    return JSONResponse({
+        "session_exists": "user" in request.session,
+        "session_keys": list(request.session.keys()),
+        "user": request.session.get("user"),
+        "expiry": request.session.get("expiry")
+    })
+
 @app.get("/", response_class=HTMLResponse)
 async def serve_frontend(request: Request):
     """Serve the main landing page - with proper session validation"""
@@ -219,33 +237,31 @@ def get_initials(name: str) -> str:
     else:
         return "UN"
 
-@app.post("/status")
-async def get_process_status(request: Request):
-    """Endpoint to check the status of the background process"""
-    # Example: Return a mock status for now
-    return JSONResponse({"status": "running", "message": "Process is still running"})
-
 @app.post("/upload")
 async def upload_pdf(
     file: UploadFile = File(...),
     request: Request = None
 ):
     """Handle PDF upload and processing"""
-    # Start a background task for long-running processing
-    task = BackgroundTask(process_pdf_task, file, request)
-    return JSONResponse({"status": "processing", "message": "File is being processed"}, background=task)
-
-async def process_pdf_task(file: UploadFile, request: Request):
-    """Handle PDF upload and processing"""
-    # Check authentication
-    user = get_current_user(request)
-    logger.info(f"File upload request from user: {user['username']}")
-    
-    # Start timing the TOTAL processing (not just AI time)
-    total_processing_start_time = time.time()
-    total_ai_time = 0  # Track AI-specific processing time
-    
     try:
+        # Check authentication with better error handling
+        try:
+            user = get_current_user(request)
+        except HTTPException as e:
+            if e.status_code == 401:
+                logger.error("Unauthorized access to upload endpoint")
+                return JSONResponse(
+                    status_code=401,
+                    content={"status": "error", "message": "Session expired. Please login again."}
+                )
+            raise
+        
+        logger.info(f"File upload request from user: {user['username']}")
+        
+        # Start timing the TOTAL processing (not just AI time)
+        total_processing_start_time = time.time()
+        total_ai_time = 0  # Track AI-specific processing time
+        
         if not file.filename.endswith(".pdf"):
             raise HTTPException(status_code=400, detail="Only PDF files are allowed")
 
@@ -287,7 +303,7 @@ async def process_pdf_task(file: UploadFile, request: Request):
         if not all_tasks:
             raise HTTPException(status_code=400, detail="No valid tasks found to process")
 
-        batch_size = 20  # Increased batch size for fewer API calls
+        batch_size = 15  # Increased batch size for fewer API calls
         task_batches_split = [all_tasks[i:i + batch_size] for i in range(0, len(all_tasks), batch_size)]
 
         results = []
@@ -412,8 +428,13 @@ async def process_pdf_task(file: UploadFile, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error processing PDF: {str(e)}")
-        logger.error(f"Detailed error during PDF processing: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to process PDF: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error", 
+                "message": f"Failed to process PDF. Please try again. Error: {str(e)}"
+            }
+        )
     
 # NEW: Add function to count tasks per phase
 def count_tasks_per_phase(df):
@@ -894,26 +915,36 @@ async def health_check():
 # Add middleware after route definitions to ensure proper ordering
 @app.middleware("http")
 async def check_session_validity(request: Request, call_next):
-    """Middleware to check session validity"""
-    # Skip session check for login page and static files
-    if request.url.path in ["/login", "/static", "/health"] or request.url.path.startswith("/static/"):
+    """Middleware to check session validity with better error handling"""
+    # Skip session check for public routes
+    public_paths = ["/login", "/static", "/health", "/clear-session"]
+    if any(request.url.path.startswith(path) for path in public_paths) or request.url.path == "/":
         return await call_next(request)
     
     # Check if session exists and has user data
     user = request.session.get("user")
     if not user:
-        # If no user session and trying to access protected routes, redirect to login
-        if request.url.path not in ["/login", "/static", "/clear-session"] and not request.url.path.startswith("/static/"):
-            logger.info(f"Redirecting to login from {request.url.path} - no session")
-            return RedirectResponse(url="/login", status_code=302)
+        logger.warning(f"No user session found for path: {request.url.path}")
+        # If this is an API call, return JSON error instead of redirect
+        if request.url.path.startswith("/api/") or request.url.path.startswith("/upload"):
+            return JSONResponse(
+                status_code=401,
+                content={"status": "error", "message": "Session expired. Please login again."}
+            )
+        # For other protected routes, redirect to login
+        return RedirectResponse(url="/login", status_code=302)
     
     # Check session expiry if it exists
     expiry = request.session.get("expiry")
     if expiry and time.time() > expiry:
-        logger.info(f"Session expired for user: {user.get('username', 'Unknown') if user else 'Unknown'}")
+        logger.info(f"Session expired for user: {user.get('username', 'Unknown')}")
         request.session.clear()
-        if request.url.path not in ["/login", "/static"] and not request.url.path.startswith("/static/"):
-            return RedirectResponse(url="/login", status_code=302)
+        if request.url.path.startswith("/api/") or request.url.path.startswith("/upload"):
+            return JSONResponse(
+                status_code=401,
+                content={"status": "error", "message": "Session expired. Please login again."}
+            )
+        return RedirectResponse(url="/login", status_code=302)
     
     response = await call_next(request)
     return response
@@ -921,11 +952,19 @@ async def check_session_validity(request: Request, call_next):
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Check session secret
+SESSION_SECRET = os.getenv("SESSION_SECRET")
+if not SESSION_SECRET or SESSION_SECRET == "your-secret-key-change-in-production":
+    logger.warning("Using default session secret - this is insecure for production!")
+
 # Add session middleware with secret key
 app.add_middleware(
     SessionMiddleware,
-    secret_key=os.getenv("SESSION_SECRET", "your-secret-key-change-in-production"),
-    max_age=None  # Keep session alive indefinitely
+    secret_key=SESSION_SECRET or "your-secret-key-change-in-production",
+    session_cookie="session",
+    max_age=24*60*60,  # 24 hours
+    same_site="lax",
+    https_only=False  # Set to True in production if using HTTPS
 )
 
 if __name__ == "__main__":
