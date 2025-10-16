@@ -2312,12 +2312,16 @@
                 }
             })
             .catch(error => {
-                console.error('💥 Error during processing:', error);
-                console.error('Full server response:', error.response || 'No response available');
                 // Reset buttons on error
                 regenerateButton.style.display = 'none';
                 processButton.disabled = !currentFile;
-                
+
+                // Check if error is due to session expiration (redirect to login)
+                if (error && error.message && (error.message.includes('Not authenticated') || error.message.includes('login'))) {
+                    window.location.href = '/login';
+                    return;
+                }
+
                 if (error.message !== undefined) {
                     console.error('Error details:', error.message);
                     alert('Error: ' + error.message);
