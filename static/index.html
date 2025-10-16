@@ -1964,19 +1964,20 @@
         const processButton = document.getElementById('processButton');
         const regenerateButton = document.getElementById('regenerateButton');
         const processingSection = document.getElementById('processingSection');
-        const progressFill = document.getElementById('progressFill');
-        const progressPercentage = document.getElementById('progressPercentage');
-        const step1Time = document.getElementById('step1Time');
-        const step2Time = document.getElementById('step2Time');
-        const step3Time = document.getElementById('step3Time');
-        const step4Time = document.getElementById('step4Time');
+        // const progressFill = document.getElementById('progressFill');
+        // const progressPercentage = document.getElementById('progressPercentage');
+        // const step1Time = document.getElementById('step1Time');
+        // const step2Time = document.getElementById('step2Time');
+        // const step3Time = document.getElementById('step3Time');
+        // const step4Time = document.getElementById('step4Time');
         const cancelProcessingBtn = document.getElementById('cancelProcessingBtn');
         const resultsSection = document.getElementById('resultsSection');
         const durationValue = document.getElementById('durationValue');
         const completedTasksValue = document.getElementById('completedTasksValue');
         const totalPhasesValue = document.getElementById('totalPhasesValue');
         const resultsTableContainer = document.getElementById('resultsTableContainer');
-        // Removed like/dislike buttons as they are not present in the HTML
+        // const likeBtn = document.getElementById('likeBtn');
+        // const dislikeBtn = document.getElementById('dislikeBtn');
         const downloadExcel = document.getElementById('downloadExcel');
         const sendFeedback = document.getElementById('sendFeedback');
 
@@ -2178,7 +2179,19 @@
                 cancelProcessing();
             });
 
-            // Removed like/dislike event listeners as the buttons do not exist
+            // likeBtn.addEventListener('click', () => {
+            //     likeBtn.classList.toggle('active');
+            //     if (likeBtn.classList.contains('active')) {
+            //         dislikeBtn.classList.remove('active');
+            //     }
+            // });
+
+            // dislikeBtn.addEventListener('click', () => {
+            //     dislikeBtn.classList.toggle('active');
+            //     if (dislikeBtn.classList.contains('active')) {
+            //         likeBtn.classList.remove('active');
+            //     }
+            // });
         }
 
         // File handling functions
@@ -2226,7 +2239,22 @@
             return now.toLocaleTimeString();
         }
 
-        function processFile(file) {
+        async function processFile(file) {
+            // First check if user is still authenticated
+            try {
+                const authCheck = await fetch('/api/user');
+                if (!authCheck.ok) {
+                    // Session expired, redirect to login
+                    window.location.href = '/login';
+                    return;
+                }
+            } catch (error) {
+                console.error('Authentication check failed:', error);
+                alert('Session expired. Please login again.');
+                window.location.href = '/login';
+                return;
+            }
+
             // Hide regenerate button and disable process button during processing
             regenerateButton.style.display = 'none';
             processButton.disabled = true;
@@ -2241,29 +2269,30 @@
             
             console.log('🔄 Starting file processing...');
             
-            // Send the actual request to backend immediately
-            fetch('/upload', {
-                method: 'POST',
-                body: formData,
-                credentials: "include"
-            })
-            .then(response => {
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData,
+                    credentials: "include" // Important for sessions
+                });
+                
                 console.log('📡 Response received:', response.status);
-                if (response.ok) {
-                    return response.json();
-                } else if (response.status === 401) {
+                
+                if (response.status === 401) {
                     // User not authenticated
+                    alert('Session expired. Please login again.');
                     window.location.href = '/login';
                     return;
-                } else {
-                    return response.text().then(text => {
-                        console.error('❌ Server error:', text);
-                        throw new Error(text || 'Failed to process file');
-                    });
                 }
-            })
-            .then(data => {
-                console.log('✅ Processing completed successfully');
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('❌ Server error:', errorText);
+                    throw new Error(errorText || 'Failed to process file');
+                }
+                
+                const data = await response.json();
+                
                 if (data && data.status === 'success') {
                     // Decode the Excel file from base64
                     const excelData = atob(data.file);
@@ -2294,62 +2323,23 @@
                     
                     console.log('🎉 UI updated successfully');
                 } else if (data) {
-                    // If backend says "processing", show a message instead of error
-                    if (data.status === 'processing' && data.message) {
-                        alert('Info: ' + data.message + '\n\nPlease wait until processing completes.');
-                        // Optionally, keep the processing section visible and do not show error
-                        return;
-                    }
                     console.error('❌ Processing failed:', data);
                     throw new Error(data.detail || 'Processing failed');
                 }
-            })
-            .catch(error => {
-                
+            } catch (error) {
+                console.error('💥 Error during processing:', error);
                 // Reset buttons on error
                 regenerateButton.style.display = 'none';
                 processButton.disabled = !currentFile;
-            
-                // Check response status for authentication error
-                if (error.name === 'Response' && error.status === 401) {
-                    window.location.href = '/login?' + new URLSearchParams(window.location.search); // Preserve user/role
-                    return;
+                
+                if (error.message.includes('Session expired') || error.message.includes('401')) {
+                    alert('Session expired. Please login again.');
+                    window.location.href = '/login';
+                } else {
+                    alert('Error: ' + error.message);
                 }
-            
-                // Log and display error
-                console.error('Error details:', error);
-                const errorMessage = error.message || 'Unknown error occurred';
-                alert('Error: ' + errorMessage + '\n\nCheck the browser console for more details. If this persists, try logging in again.');
                 processingSection.classList.remove('show');
-            
-                // Start polling for status
-                startPollingForStatus();
-            });
-
-        function startPollingForStatus() {
-            const interval = setInterval(() => {
-                fetch('/status', { method: 'POST', credentials: "include" })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.status === 'completed') {
-                            clearInterval(interval);
-                            console.log('✅ Processing completed successfully');
-                            // Update UI with results
-                            updateResultsUI(data.metadata);
-                            processingSection.classList.remove('show');
-                            resultsSection.classList.add('show');
-                        } else if (data.status === 'failed') {
-                            clearInterval(interval);
-                            console.error('❌ Processing failed:', data.message);
-                            alert('Error: ' + data.message);
-                            processingSection.classList.remove('show');
-                        }
-                    })
-                    .catch(err => {
-                        console.error('Error while polling for status:', err);
-                    });
-            }, 5000); // Poll every 5 seconds
-        }
+            }
         }
         
         function updateResultsUI(metadata) {
@@ -2450,6 +2440,7 @@
             
             resultsTableContainer.innerHTML = tableHTML;
         }
+
         function calculateTotalDuration(durations) {
             if (!durations) return '--';
             
@@ -2523,6 +2514,6 @@
             }
         });
 
-    </script>
+    </script>  
 </body>
 </html>
