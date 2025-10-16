@@ -2318,8 +2318,10 @@
                 processButton.disabled = !currentFile;
                 
                 if (error.message !== undefined) {
+                    console.error('Error details:', error.message);
                     alert('Error: ' + error.message);
                 } else {
+                    console.error('Unknown error occurred. Check the console for details.');
                     alert('Unknown error occurred. Please check the console for details.');
                 }
                 processingSection.classList.remove('show');
