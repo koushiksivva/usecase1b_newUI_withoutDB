@@ -2313,6 +2313,7 @@
             })
             .catch(error => {
                 console.error('💥 Error during processing:', error);
+                console.error('Full server response:', error.response || 'No response available');
                 // Reset buttons on error
                 regenerateButton.style.display = 'none';
                 processButton.disabled = !currentFile;
@@ -2325,7 +2326,35 @@
                     alert('Unknown error occurred. Please check the console for details.');
                 }
                 processingSection.classList.remove('show');
+
+                // Start polling for status
+                startPollingForStatus();
             });
+
+        function startPollingForStatus() {
+            const interval = setInterval(() => {
+                fetch('/status', { method: 'POST', credentials: "include" })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'completed') {
+                            clearInterval(interval);
+                            console.log('✅ Processing completed successfully');
+                            // Update UI with results
+                            updateResultsUI(data.metadata);
+                            processingSection.classList.remove('show');
+                            resultsSection.classList.add('show');
+                        } else if (data.status === 'failed') {
+                            clearInterval(interval);
+                            console.error('❌ Processing failed:', data.message);
+                            alert('Error: ' + data.message);
+                            processingSection.classList.remove('show');
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Error while polling for status:', err);
+                    });
+            }, 5000); // Poll every 5 seconds
+        }
         }
         
         function updateResultsUI(metadata) {
