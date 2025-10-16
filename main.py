@@ -46,6 +46,8 @@ def get_current_user(request: Request):
     user = request.session.get("user")
     if not user:
         logger.info(f"Session data: {request.session}")
+        logger.info(f"Redirecting to login from {request.url.path} - no session")
+        logger.info(f"Popup in UI triggered due to session loss at {request.url.path}")
         raise HTTPException(status_code=401, detail="Not authenticated")
     return user
 
@@ -917,6 +919,7 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
 
 
