@@ -2312,25 +2312,23 @@
                 }
             })
             .catch(error => {
+                
                 // Reset buttons on error
                 regenerateButton.style.display = 'none';
                 processButton.disabled = !currentFile;
-
-                // Check if error is due to session expiration (redirect to login)
-                if (error && error.message && (error.message.includes('Not authenticated') || error.message.includes('login'))) {
-                    window.location.href = '/login';
+            
+                // Check response status for authentication error
+                if (error.name === 'Response' && error.status === 401) {
+                    window.location.href = '/login?' + new URLSearchParams(window.location.search); // Preserve user/role
                     return;
                 }
-
-                if (error.message !== undefined) {
-                    console.error('Error details:', error.message);
-                    alert('Error: ' + error.message);
-                } else {
-                    console.error('Unknown error occurred. Check the console for details.');
-                    alert('Unknown error occurred. Please check the console for details.');
-                }
+            
+                // Log and display error
+                console.error('Error details:', error);
+                const errorMessage = error.message || 'Unknown error occurred';
+                alert('Error: ' + errorMessage + '\n\nCheck the browser console for more details. If this persists, try logging in again.');
                 processingSection.classList.remove('show');
-
+            
                 // Start polling for status
                 startPollingForStatus();
             });
