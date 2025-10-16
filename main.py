@@ -219,6 +219,12 @@ def get_initials(name: str) -> str:
     else:
         return "UN"
 
+@app.post("/status")
+async def get_process_status(request: Request):
+    """Endpoint to check the status of the background process"""
+    # Example: Return a mock status for now
+    return JSONResponse({"status": "running", "message": "Process is still running"})
+
 @app.post("/upload")
 async def upload_pdf(
     file: UploadFile = File(...),
@@ -406,6 +412,7 @@ async def process_pdf_task(file: UploadFile, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error processing PDF: {str(e)}")
+        logger.error(f"Detailed error during PDF processing: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to process PDF: {str(e)}")
     
 # NEW: Add function to count tasks per phase
