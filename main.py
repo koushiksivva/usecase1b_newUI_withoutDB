@@ -45,6 +45,7 @@ def get_current_user(request: Request):
     """Get current user from session, raise 401 if not authenticated"""
     user = request.session.get("user")
     if not user:
+        logger.info(f"Session data: {request.session}")
         raise HTTPException(status_code=401, detail="Not authenticated")
     return user
 
@@ -916,5 +917,6 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
 
