@@ -225,6 +225,12 @@ async def upload_pdf(
     request: Request = None
 ):
     """Handle PDF upload and processing"""
+    # Start a background task for long-running processing
+    task = BackgroundTask(process_pdf_task, file, request)
+    return JSONResponse({"status": "processing", "message": "File is being processed"}, background=task)
+
+async def process_pdf_task(file: UploadFile, request: Request):
+    """Handle PDF upload and processing"""
     # Check authentication
     user = get_current_user(request)
     logger.info(f"File upload request from user: {user['username']}")
@@ -919,7 +925,3 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
-
-
-
