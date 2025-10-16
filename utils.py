@@ -36,8 +36,8 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('app.log')
+        logging.StreamHandler()
+       
     ]
 )
 logger = logging.getLogger(__name__)
@@ -107,14 +107,10 @@ except Exception as e:
     logger.error(f"Failed to initialize Azure OpenAI Embeddings: {str(e)}")
     raise
 
-import pprint
-logger.info(f"CosmosDB URI at startup: {COSMOS_URI}")
 try:
     client = MongoClient(COSMOS_URI)
     db = client[COSMOS_DB]
     collection = db[COSMOS_COLLECTION]
-    logger.info(f"Using database: {COSMOS_DB}, collection: {COSMOS_COLLECTION}")
-    logger.info(f"MongoClient repr: {pprint.pformat(client)}")
     collection.count_documents({})
     logger.info("Cosmos DB connection successful")
 except Exception as e:
@@ -426,7 +422,7 @@ def similarity_search_cosmos(query_text, document_id, k=5):
                             "cosmosSearch": {
                                 "vector": query_embedding,
                                 "path": "embedding",
-                                "k": min(k, 10)  # Limit early
+                                "k": min(k,10)  # Limit early
                             }
                         }
                     },
