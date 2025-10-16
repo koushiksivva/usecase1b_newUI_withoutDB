@@ -1976,8 +1976,7 @@
         const completedTasksValue = document.getElementById('completedTasksValue');
         const totalPhasesValue = document.getElementById('totalPhasesValue');
         const resultsTableContainer = document.getElementById('resultsTableContainer');
-        const likeBtn = document.getElementById('likeBtn');
-        const dislikeBtn = document.getElementById('dislikeBtn');
+        // Removed like/dislike buttons as they are not present in the HTML
         const downloadExcel = document.getElementById('downloadExcel');
         const sendFeedback = document.getElementById('sendFeedback');
 
@@ -2179,19 +2178,7 @@
                 cancelProcessing();
             });
 
-            likeBtn.addEventListener('click', () => {
-                likeBtn.classList.toggle('active');
-                if (likeBtn.classList.contains('active')) {
-                    dislikeBtn.classList.remove('active');
-                }
-            });
-
-            dislikeBtn.addEventListener('click', () => {
-                dislikeBtn.classList.toggle('active');
-                if (dislikeBtn.classList.contains('active')) {
-                    likeBtn.classList.remove('active');
-                }
-            });
+            // Removed like/dislike event listeners as the buttons do not exist
         }
 
         // File handling functions
