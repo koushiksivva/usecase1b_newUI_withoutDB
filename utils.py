@@ -36,8 +36,8 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('app.log')
+        logging.StreamHandler()
+       
     ]
 )
 logger = logging.getLogger(__name__)
@@ -107,15 +107,52 @@ except Exception as e:
     logger.error(f"Failed to initialize Azure OpenAI Embeddings: {str(e)}")
     raise
 
+# MongoDB/Cosmos DB Connection with better timeout settings
 try:
-    client = MongoClient(COSMOS_URI)
+    client = MongoClient(
+        COSMOS_URI,
+        socketTimeoutMS=60000,        # 60 seconds per operation
+        connectTimeoutMS=30000,       # 30 seconds to connect
+        serverSelectionTimeoutMS=30000, # 30 seconds to find server
+        maxPoolSize=50,
+        retryWrites=True,
+        retryReads=True,
+        w='majority',
+        readPreference='primary'
+    )
     db = client[COSMOS_DB]
     collection = db[COSMOS_COLLECTION]
-    collection.count_documents({})
+    
+    # Test connection with shorter timeout
+    collection.count_documents({}, limit=1)
     logger.info("Cosmos DB connection successful")
 except Exception as e:
     logger.error(f"Failed to connect to Cosmos DB: {str(e)}")
-    raise
+    # Don't raise - allow the app to continue without database
+
+# Retry decorator for database operations
+import time
+from functools import wraps
+from pymongo.errors import ServerSelectionTimeoutError, AutoReconnect, NetworkTimeout
+
+def retry_database_operation(max_retries=3, delay=2, backoff=2):
+    """Retry decorator for database operations with exponential backoff"""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            mtries, mdelay = max_retries, delay
+            while mtries > 1:
+                try:
+                    return func(*args, **kwargs)
+                except (ServerSelectionTimeoutError, AutoReconnect, NetworkTimeout, ConnectionError) as e:
+                    logger.warning(f"Database connection failed, retrying in {mdelay}s: {e}")
+                    time.sleep(mdelay)
+                    mtries -= 1
+                    mdelay *= backoff
+            # Last attempt
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
 @lru_cache(maxsize=50000)
 def get_query_embedding(query: str):
@@ -322,6 +359,7 @@ def normalize_and_clean_text(text):
     text = re.sub(r'\s+', ' ', text)
     return text
 
+@retry_database_operation(max_retries=2, delay=2, backoff=2)
 def check_existing_chunks(document_id):
     try:
         # Only check if any chunks exist, don't count all documents
@@ -346,6 +384,7 @@ def get_existing_embedding(text):
         logger.error(f"Error getting existing embedding: {e}")
         return None
 
+@retry_database_operation(max_retries=2, delay=3, backoff=2)
 def store_chunks_in_cosmos(text_chunks, image_chunks, document_id):
     try:
         # Check if document already exists first
@@ -355,56 +394,80 @@ def store_chunks_in_cosmos(text_chunks, image_chunks, document_id):
 
         documents_to_insert = []
         
-        # Process text chunks
-        for i, chunk in enumerate(text_chunks):
-            if not chunk.strip():
-                continue
-            chunk_id = f"{document_id}_text_{i}"
-            text_hash = hashlib.md5(normalize_and_clean_text(chunk).encode('utf-8')).hexdigest()
-            embedding = cached_doc_embedding(chunk)  # Use cached embedding directly
-            documents_to_insert.append({
-                "document_id": document_id,
-                "chunk_id": chunk_id,
-                "text": chunk,
-                "text_hash": text_hash,
-                "embedding": embedding,
-                "chunk_index": i,
-                "chunk_type": CHUNK_TYPES["TEXT"],
-                "created_at": pd.Timestamp.now().isoformat()
-            })
+        # Process text chunks in smaller batches to avoid timeouts
+        batch_size = 10
+        for i in range(0, len(text_chunks), batch_size):
+            batch_chunks = text_chunks[i:i + batch_size]
+            for j, chunk in enumerate(batch_chunks):
+                if not chunk.strip():
+                    continue
+                chunk_index = i + j
+                chunk_id = f"{document_id}_text_{chunk_index}"
+                text_hash = hashlib.md5(normalize_and_clean_text(chunk).encode('utf-8')).hexdigest()
+                embedding = cached_doc_embedding(chunk)
+                documents_to_insert.append({
+                    "document_id": document_id,
+                    "chunk_id": chunk_id,
+                    "text": chunk,
+                    "text_hash": text_hash,
+                    "embedding": embedding,
+                    "chunk_index": chunk_index,
+                    "chunk_type": CHUNK_TYPES["TEXT"],
+                    "created_at": pd.Timestamp.now().isoformat()
+                })
+            
+            # Insert batch immediately
+            if documents_to_insert:
+                try:
+                    collection.insert_many(documents_to_insert, ordered=False)
+                    logger.info(f"Inserted batch of {len(documents_to_insert)} text chunks")
+                    documents_to_insert = []  # Clear for next batch
+                except Exception as batch_error:
+                    logger.error(f"Batch insert failed: {batch_error}")
+                    # Continue with next batch
         
-        # Process image chunks (only those with descriptions)
-        for i, image_info in enumerate(image_chunks):
-            if not image_info.get("description"):
-                continue
-            chunk_id = f"{document_id}_image_{i}"
-            description = image_info["description"]
-            desc_hash = hashlib.md5(normalize_and_clean_text(description).encode('utf-8')).hexdigest()
-            embedding = cached_doc_embedding(description)
-            documents_to_insert.append({
-                "document_id": document_id,
-                "chunk_id": chunk_id,
-                "image_data": image_info["data"],
-                "image_description": description,
-                "desc_hash": desc_hash,
-                "embedding": embedding,
-                "chunk_index": i,
-                "chunk_type": CHUNK_TYPES["IMAGE"],
-                "page": image_info["page"],
-                "created_at": pd.Timestamp.now().isoformat()
-            })
+        # Process image chunks separately
+        image_batch_size = 5
+        for i in range(0, len(image_chunks), image_batch_size):
+            batch_images = image_chunks[i:i + image_batch_size]
+            image_documents = []
+            
+            for j, image_info in enumerate(batch_images):
+                if not image_info.get("description"):
+                    continue
+                chunk_index = i + j
+                chunk_id = f"{document_id}_image_{chunk_index}"
+                description = image_info["description"]
+                desc_hash = hashlib.md5(normalize_and_clean_text(description).encode('utf-8')).hexdigest()
+                embedding = cached_doc_embedding(description)
+                image_documents.append({
+                    "document_id": document_id,
+                    "chunk_id": chunk_id,
+                    "image_data": image_info["data"],
+                    "image_description": description,
+                    "desc_hash": desc_hash,
+                    "embedding": embedding,
+                    "chunk_index": chunk_index,
+                    "chunk_type": CHUNK_TYPES["IMAGE"],
+                    "page": image_info["page"],
+                    "created_at": pd.Timestamp.now().isoformat()
+                })
+            
+            if image_documents:
+                try:
+                    collection.insert_many(image_documents, ordered=False)
+                    logger.info(f"Inserted batch of {len(image_documents)} image chunks")
+                except Exception as image_error:
+                    logger.error(f"Image batch insert failed: {image_error}")
         
-        if documents_to_insert:
-            # Batch insert all chunks at once
-            collection.insert_many(documents_to_insert, ordered=False)
-            logger.info(f"Inserted {len(documents_to_insert)} chunks for {document_id}")
-        else:
-            logger.info(f"No chunks to insert for {document_id}")
+        logger.info(f"Successfully stored all chunks for {document_id}")
         return True
+        
     except Exception as e:
         logger.error(f"Error storing chunks in Cosmos DB: {e}")
         return False
     
+@retry_database_operation(max_retries=2, delay=2, backoff=2)
 def similarity_search_cosmos(query_text, document_id, k=5):
     try:
         results = []
@@ -422,7 +485,7 @@ def similarity_search_cosmos(query_text, document_id, k=5):
                             "cosmosSearch": {
                                 "vector": query_embedding,
                                 "path": "embedding",
-                                "k": min(k, 10)  # Limit early
+                                "k": min(k,10)
                             }
                         }
                     },
@@ -437,7 +500,7 @@ def similarity_search_cosmos(query_text, document_id, k=5):
                         "score": {"$meta": "searchScore"}
                     }}
                 ]
-                vector_results = list(collection.aggregate(pipeline))
+                vector_results = list(collection.aggregate(pipeline, maxTimeMS=30000))  # 30s timeout
                 for doc in vector_results:
                     if doc.get("chunk_type") == CHUNK_TYPES["TEXT"]:
                         results.append({"page_content": doc["text"], "chunk_type": CHUNK_TYPES["TEXT"]})
@@ -448,12 +511,12 @@ def similarity_search_cosmos(query_text, document_id, k=5):
                             "image_data": doc.get("image_data", "")
                         })
                 if results:
-                    return results[:k]  # Return only requested number
+                    return results[:k]
             except Exception as ve:
                 logger.warning(f"Vector search failed: {ve}")
         
-        # Fallback text search with early termination
-        query_words = query_text.lower().split()[:3]  # Use fewer words
+        # Fallback text search
+        query_words = query_text.lower().split()[:3]
         text_search_query = {
             "document_id": document_id,
             "$or": [{"text": {"$regex": word, "$options": "i"}} for word in query_words]
@@ -473,7 +536,7 @@ def similarity_search_cosmos(query_text, document_id, k=5):
                     "image_data": doc.get("image_data", "")
                 })
         
-        return results[:k]  # Ensure we return only k results
+        return results[:k]
         
     except Exception as e:
         logger.error(f"Error in Cosmos DB search: {str(e)}")
@@ -633,6 +696,7 @@ def process_batch_with_fallback(sub_batch, document_id, durations, normalized_pd
                 continue
             task = str(task)
             try:
+                # Try vector search with retry logic
                 query_embedding = get_query_embedding(task)
                 pipeline = [
                     {
@@ -647,14 +711,15 @@ def process_batch_with_fallback(sub_batch, document_id, durations, normalized_pd
                     {"$match": {"document_id": document_id}},
                     {"$project": {"text": 1, "chunk_type": 1, "image_description": 1, "image_data": 1, "_id": 0}}
                 ]
-                vector_results = list(collection.aggregate(pipeline))
+                vector_results = list(collection.aggregate(pipeline, maxTimeMS=30000))  # 30s timeout
                 for doc in vector_results:
                     if doc.get("text"):
                         docs.append(doc["text"])
                     elif doc.get("image_description"):
                         docs.append(doc["image_description"])
             except Exception as search_error:
-                logger.warning(f"Vector search failed for '{task}': {search_error}")
+                logger.warning(f"Vector search failed for '{task}', using fallback: {search_error}")
+                # Continue without vector results
             substring_flags[task] = verify_substring_match(task, normalized_pdf_text)
         unique_docs = list(set(docs))
         combined_context = "\n".join(unique_docs[:5])
@@ -686,6 +751,38 @@ def process_batch_with_fallback(sub_batch, document_id, durations, normalized_pd
     except Exception as e:
         logger.error(f"Error processing batch: {e}")
         return [{"Heading": str(h), "Task": str(t), "Present": "error", **durations} for h, t in sub_batch], 0
+
+# NEW: Text-only processing function for when database is unavailable
+def process_batch_text_only(sub_batch, durations, normalized_pdf_text, pdf_text):
+    """Process batch using only text matching, no database calls"""
+    try:
+        batch_results = []
+        
+        for heading, task in sub_batch:
+            if not task:
+                continue
+            task_str = str(task)
+            
+            # Use only text-based matching methods
+            substring_match = verify_substring_match(task_str, normalized_pdf_text)
+            fuzzy_match = fuzzy_match_optimized(task_str, pdf_text)
+            
+            # Combine results - prefer substring match
+            final_answer = "yes" if substring_match == "yes" else fuzzy_match
+            
+            batch_results.append({
+                "Heading": str(heading) if heading else "Unknown",
+                "Task": task_str,
+                "Present": final_answer,
+                **durations
+            })
+            
+        return batch_results, 0  # 0 AI time since no LLM calls
+        
+    except Exception as e:
+        logger.error(f"Error in text-only processing: {e}")
+        return [{"Heading": str(h), "Task": str(t), "Present": "error", **durations} for h, t in sub_batch], 0
+
 def process_pdf_safely(uploaded_file):
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf_file:
