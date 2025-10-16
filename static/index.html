@@ -2293,19 +2293,18 @@
                     resultsSection.classList.add('show');
                     
                     console.log('🎉 UI updated successfully');
-                 } 
-                //else if (data) {
-                //     // If backend says "processing", show a message instead of error
-                //     if (data.status === 'processing' && data.message) {
-                //         alert('Info: ' + data.message + '\n\nPlease wait until processing completes.');
-                //         // Optionally, keep the processing section visible and do not show error
-                //         // Start polling for status if not already started
-                //         startPollingForStatus();
-                //         return;
-                //     }
-                    // console.error('❌ Processing failed:', data);
-                    // throw new Error(data.detail || 'Processing failed');
-                //}
+                 }else if (data) {
+                    // If backend says "processing", show a message instead of error
+                    if (data.status === 'processing' && data.message) {
+                        //alert('Info: ' + data.message + '\n\nPlease wait until processing completes.');
+                        // Optionally, keep the processing section visible and do not show error
+                        // Start polling for status if not already started
+                        startPollingForStatus();
+                        return;
+                    }
+                    console.error('❌ Processing failed:', data);
+                    throw new Error(data.detail || 'Processing failed');
+                }
             })
             .catch(error => {
                 
@@ -2325,8 +2324,6 @@
                 alert('Error: ' + errorMessage + '\n\nCheck the browser console for more details. If this persists, try logging in again.');
                 processingSection.classList.remove('show');
             
-                // Start polling for status
-                startPollingForStatus();
             });
 
         function startPollingForStatus() {
@@ -2529,5 +2526,6 @@
     </script>
 </body>
 </html>
+
 
 
