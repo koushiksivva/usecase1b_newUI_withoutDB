@@ -880,44 +880,41 @@ async def health_check():
 # Add middleware after route definitions to ensure proper ordering
 @app.middleware("http")
 async def check_session_validity(request: Request, call_next):
-    """Middleware to check session validity"""
+    """Middleware to check session validity"""
 
-    # Skip session check for these paths
-    skip_paths = ["/login", "/static", "/health", "/clear-session"]
+    # Skip session check for these paths
+    skip_paths = ["/login", "/static", "/health", "/clear-session"]
 
-    # ✅ ADD: API routes should return JSON errors, not HTML redirects
-    api_paths = ["/upload", "/api/user", "/api/token-sessions", "/api/token-summary"]
+    # ✅ ADD: API routes should return JSON errors, not HTML redirects
+    api_paths = ["/upload", "/api/user", "/api/token-sessions", "/api/token-summary"]
 
-    if (request.url.path in skip_paths or 
-        request.url.path.startswith("/static/") or
-        request.url.path in api_paths):  # Don't redirect API calls
-        return await call_next(request)
+    if (
+        request.url.path in skip_paths
+        or request.url.path.startswith("/static/")
+        or request.url.path in api_paths  # Don't redirect API calls
+    ):
+        return await call_next(request)
 
-    # Check session
-    user = request.session.get("user")
-    if not user:
-        logger.info(f"No session for {request.url.path}")
-        # For API routes, return JSON 401 instead of HTML redirect
-        if request.url.path in api_paths:
-            return JSONResponse(
-                {"detail": "Not authenticated"}, 
-                status_code=401
-            )
-        # For page routes, redirect to login
-        return RedirectResponse(url="/login", status_code=302)
+    # Check session
+    user = request.session.get("user")
+    if not user:
+        logger.info(f"No session for {request.url.path}")
+        # For API routes, return JSON 401 instead of HTML redirect
+        if request.url.path in api_paths:
+            return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+        # For page routes, redirect to login
+        return RedirectResponse(url="/login", status_code=302)
 
-    # Check expiry
-    expiry = request.session.get("expiry")
-    if expiry and time.time() > expiry:
-        logger.info(f"Session expired for {user.get('username', 'Unknown')}")
-        request.session.clear()
-        if request.url.path in api_paths:
-            return JSONResponse(
-                {"detail": "Session expired"}, 
-                status_code=401
-            )
-        return RedirectResponse(url="/login", status_code=302)
-    return await call_next(request)
+    # Check expiry
+    expiry = request.session.get("expiry")
+    if expiry and time.time() > expiry:
+        logger.info(f"Session expired for {user.get('username', 'Unknown')}")
+        request.session.clear()
+        if request.url.path in api_paths:
+            return JSONResponse({"detail": "Session expired"}, status_code=401)
+        return RedirectResponse(url="/login", status_code=302)
+
+    return await call_next(request)
 
  
 # Mount static files
@@ -940,11 +937,11 @@ async def test_async():
         "timestamp": time.time()
     })
 
-# 🔑 Generate a new secret key every time the app restarts
-SECRET_KEY = secrets.token_hex(32)
+# # 🔑 Generate a new secret key every time the app restarts
+# SECRET_KEY = secrets.token_hex(32)
 
 # Add Session Middleware
-app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
 
 # Add to your FastAPI app configuration
 app.add_middleware(
@@ -966,3 +963,4 @@ if __name__ == "__main__":
         limit_concurrency=1000,
         backlog=2048
     )
+
