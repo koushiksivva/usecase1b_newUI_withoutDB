@@ -2251,16 +2251,16 @@
                 console.log('📡 Response received:', response.status);
                 if (response.ok) {
                     return response.json();
-                } else if (response.status === 401) {
+                } //else if (response.status === 401) {
                     // User not authenticated
-                    window.location.href = '/login';
-                    return;
-                } else {
-                    return response.text().then(text => {
-                        console.error('❌ Server error:', text);
-                        throw new Error(text || 'Failed to process file');
-                    });
-                }
+                //     window.location.href = '/login';
+                //     return;
+                // } else {
+                //     return response.text().then(text => {
+                //         console.error('❌ Server error:', text);
+                //         throw new Error(text || 'Failed to process file');
+                //     });
+                // }
             })
             .then(data => {
                 console.log('✅ Processing completed successfully');
@@ -2526,6 +2526,7 @@
     </script>
 </body>
 </html>
+
 
 
 
