@@ -905,11 +905,11 @@ async def check_session_validity(request: Request, call_next):
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Add session middleware with secret key
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=os.getenv("SESSION_SECRET", "your-secret-key-change-in-production")
-)
+# # Add session middleware with secret key
+# app.add_middleware(
+#     SessionMiddleware,
+#     secret_key=os.getenv("SESSION_SECRET", "your-secret-key-change-in-production")
+# )
 
 @app.get("/api/test-async")
 async def test_async():
@@ -921,10 +921,25 @@ async def test_async():
         "job_results_exists": 'job_results' in globals(),
         "timestamp": time.time()
     })
+# Add to your FastAPI app configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-
+# Increase Azure's response buffer
+import uvicorn
 if __name__ == "__main__":
-    import uvicorn
+    uvicorn.run(
+        app, 
+        host="0.0.0.0", 
+        port=8000,
+        timeout_keep_alive=300,  # 5 minutes
+        limit_concurrency=1000,
+        backlog=2048
+    )
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
 
