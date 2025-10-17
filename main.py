@@ -8,6 +8,7 @@ from utils import (
     process_batch_with_fallback, create_excel_with_formatting, generate_document_id,
     task_batches, normalize_and_clean_text, collection, check_existing_chunks  # ADD THIS
 )
+from fastapi.middleware.cors import CORSMiddleware
 import os
 import logging
 import tempfile
@@ -941,5 +942,6 @@ if __name__ == "__main__":
         limit_concurrency=1000,
         backlog=2048
     )
+
 
 
