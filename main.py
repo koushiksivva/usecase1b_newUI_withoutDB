@@ -880,30 +880,46 @@ async def health_check():
 # Add middleware after route definitions to ensure proper ordering
 @app.middleware("http")
 async def check_session_validity(request: Request, call_next):
-    """Middleware to check session validity"""
-    # Skip session check for login page and static files
-    if request.url.path in ["/login", "/static", "/health"] or request.url.path.startswith("/static/"):
-        return await call_next(request)
-    
-    # Check if session exists and has user data
-    user = request.session.get("user")
-    if not user:
-        # If no user session and trying to access protected routes, redirect to login
-        if request.url.path not in ["/login", "/static", "/clear-session"] and not request.url.path.startswith("/static/"):
-            logger.info(f"Redirecting to login from {request.url.path} - no session")
-            return RedirectResponse(url="/login", status_code=302)
-    
-    # Check session expiry if it exists
-    expiry = request.session.get("expiry")
-    if expiry and time.time() > expiry:
-        logger.info(f"Session expired for user: {user.get('username', 'Unknown') if user else 'Unknown'}")
-        request.session.clear()
-        if request.url.path not in ["/login", "/static"] and not request.url.path.startswith("/static/"):
-            return RedirectResponse(url="/login", status_code=302)
-    
-    response = await call_next(request)
-    return response
+    """Middleware to check session validity"""
 
+    # Skip session check for these paths
+    skip_paths = ["/login", "/static", "/health", "/clear-session"]
+
+    # ✅ ADD: API routes should return JSON errors, not HTML redirects
+    api_paths = ["/upload", "/api/user", "/api/token-sessions", "/api/token-summary"]
+
+    if (request.url.path in skip_paths or 
+        request.url.path.startswith("/static/") or
+        request.url.path in api_paths):  # Don't redirect API calls
+        return await call_next(request)
+
+    # Check session
+    user = request.session.get("user")
+    if not user:
+        logger.info(f"No session for {request.url.path}")
+        # For API routes, return JSON 401 instead of HTML redirect
+        if request.url.path in api_paths:
+            return JSONResponse(
+                {"detail": "Not authenticated"}, 
+                status_code=401
+            )
+        # For page routes, redirect to login
+        return RedirectResponse(url="/login", status_code=302)
+
+    # Check expiry
+    expiry = request.session.get("expiry")
+    if expiry and time.time() > expiry:
+        logger.info(f"Session expired for {user.get('username', 'Unknown')}")
+        request.session.clear()
+        if request.url.path in api_paths:
+            return JSONResponse(
+                {"detail": "Session expired"}, 
+                status_code=401
+            )
+        return RedirectResponse(url="/login", status_code=302)
+    return await call_next(request)
+
+ 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -950,8 +966,3 @@ if __name__ == "__main__":
         limit_concurrency=1000,
         backlog=2048
     )
-
-
-
-
-
