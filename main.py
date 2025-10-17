@@ -941,7 +941,8 @@ async def test_async():
 # SECRET_KEY = secrets.token_hex(32)
 
 # Add Session Middleware
-app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
+SECRET_KEY = os.getenv("SESSION_SECRET", secrets.token_hex(32))
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 
 # Add to your FastAPI app configuration
 app.add_middleware(
@@ -963,4 +964,5 @@ if __name__ == "__main__":
         limit_concurrency=1000,
         backlog=2048
     )
+
 
