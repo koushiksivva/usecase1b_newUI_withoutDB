@@ -922,6 +922,13 @@ async def test_async():
         "job_results_exists": 'job_results' in globals(),
         "timestamp": time.time()
     })
+
+# 🔑 Generate a new secret key every time the app restarts
+SECRET_KEY = secrets.token_hex(32)
+
+# Add Session Middleware
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+
 # Add to your FastAPI app configuration
 app.add_middleware(
     CORSMiddleware,
@@ -942,6 +949,7 @@ if __name__ == "__main__":
         limit_concurrency=1000,
         backlog=2048
     )
+
 
 
 
