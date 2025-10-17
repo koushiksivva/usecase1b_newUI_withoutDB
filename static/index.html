@@ -2334,7 +2334,7 @@
                  }
                  
                  // Log and display other errors
-                 console.error('❌ Error details:', error);
+                 console.error('❌ Error details:', JSON.stringify(err, null, 2));
                  const errorMessage = error.message || 'Unknown error occurred';
                  alert('Error: ' + errorMessage + '\n\nCheck the browser console for more details.\n\nIf this persists, try:\n1. Refreshing the page\n2. Logging in again\n3. Using a smaller PDF file');
                  
@@ -2541,4 +2541,5 @@
     </script>
 </body>
 </html>
+
 
