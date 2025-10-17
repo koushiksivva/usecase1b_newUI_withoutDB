@@ -911,7 +911,20 @@ app.add_middleware(
     secret_key=os.getenv("SESSION_SECRET", "your-secret-key-change-in-production")
 )
 
+@app.get("/api/test-async")
+async def test_async():
+    """Test endpoint to verify async processing is deployed"""
+    return JSONResponse({
+        "status": "ok",
+        "message": "Async processing is deployed",
+        "version": "2.0-async",
+        "job_results_exists": 'job_results' in globals(),
+        "timestamp": time.time()
+    })
+
+
 if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
