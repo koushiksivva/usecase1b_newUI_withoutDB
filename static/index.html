@@ -2112,12 +2112,12 @@
                         // Redirect to login
                         window.location.href = '/login';
                     } else {
-                        alert('Logout failed. Please try again.');
+                        // alert('Logout failed. Please try again.');
                         logoutModal.classList.remove('show');
                     }
                 } catch (error) {
                     console.error('Logout error:', error);
-                    alert('Logout failed. Please try again.');
+                    // alert('Logout failed. Please try again.');
                     logoutModal.classList.remove('show');
                 }
             });
@@ -2317,7 +2317,7 @@
                 // Log and display error
                 console.error('Error details:', error);
                 const errorMessage = error.message || 'Unknown error occurred';
-                alert('Error: ' + errorMessage + '\n\nCheck the browser console for more details. If this persists, try logging in again.');
+                //alert('Error: ' + errorMessage + '\n\nCheck the browser console for more details. If this persists, try logging in again.');
                 processingSection.classList.remove('show');
             
             });
@@ -2337,7 +2337,7 @@
                         } else if (data.status === 'failed') {
                             clearInterval(interval);
                             console.error('❌ Processing failed:', data.message);
-                            alert('Error: ' + data.message);
+                            //alert('Error: ' + data.message);
                             processingSection.classList.remove('show');
                         }
                     })
@@ -2522,3 +2522,4 @@
     </script>
 </body>
 </html>
+
