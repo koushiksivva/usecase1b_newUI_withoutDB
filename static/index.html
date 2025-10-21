@@ -2119,8 +2119,7 @@
                      .catch(err => {
                          console.error('Error while polling for status:', err);
                      });
-             }, 5000); // Poll every 5 seconds
-         }
+             }, 100); // Poll every 5 seconds
          }
          
          function updateResultsUI(metadata) {
@@ -2297,4 +2296,5 @@
       </script>
    </body>
 </html>
+
 
