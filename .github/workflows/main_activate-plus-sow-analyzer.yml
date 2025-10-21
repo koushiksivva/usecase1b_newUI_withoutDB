@@ -63,4 +63,4 @@ jobs:
         with:
           app-name: 'activate-plus-sow-analyzer'
           slot-name: 'Production'
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_8CF843B6BC264755B0F6711174846B48 }}
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_B928A93EDA8D48CFAC30A2CF3F43DEC3 }}
