@@ -1,2302 +1,340 @@
 <!DOCTYPE html>
 <html lang="en">
-   <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1">
-      <!-- ADDED -->
-      <title>Project Plan Agent - NTT DATA Business Solutions</title>
-      <style>
-         * {
-         margin: 0;
-         padding: 0;
-         box-sizing: border-box;
-         }
-         :root {
-         --primary-900: #0f172a;
-         --primary-800: #1e293b;
-         --primary-700: #334155;
-         --primary-600: #475569;
-         --primary-500: #64748b;
-         --primary-400: #94a3b8;
-         --primary-300: #cbd5e1;
-         --primary-200: #e2e8f0;
-         --primary-100: #f1f5f9;
-         --primary-50: #f8fafc;
-         --accent-600: #2563eb;
-         --accent-500: #3b82f6;
-         --accent-400: #60a5fa;
-         --accent-100: #dbeafe;
-         --accent-50: #eff6ff;
-         --success-600: #16a34a;
-         --success-500: #22c55e;
-         --success-100: #dcfce7;
-         --warning-600: #ca8a04;
-         --warning-500: #eab308;
-         --warning-100: #fef3c7;
-         --error-600: #dc2626;
-         --error-500: #ef4444;
-         --error-100: #fee2e2;
-         }
-         body {
-         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-         background: linear-gradient(135deg, var(--primary-50) 0%, var(--primary-100) 100%);
-         min-height: 100vh;
-         color: var(--primary-800);
-         line-height: 1.5;
-         overflow-x: hidden;
-         }
-         /* Removed login-specific centering and .login-container styles that broke the main layout.
-         Login page uses its own login.html file and its own CSS. */
-         /* Utility helper (optional) - does not change page layout */
-         .centered-container {
-         margin: 0 auto;
-         max-width: 1200px;
-         padding: 0 20px;
-         }
-         /* Header */
-         .header {
-         background: rgba(255, 255, 255, 0.95);
-         backdrop-filter: blur(20px);
-         border-bottom: 1px solid var(--primary-200);
-         position: sticky;
-         top: 0;
-         z-index: 1000;
-         transition: all 0.3s ease;
-         }
-         .header-content {
-         display: flex;
-         justify-content: space-between;
-         align-items: center;
-         padding: 1rem 2rem;
-         max-width: 1400px;
-         margin: 0 auto;
-         }
-         .header-left {
-         display: flex;
-         align-items: center;
-         gap: 1rem;
-         }
-         .hamburger {
-         background: none;
-         border: none;
-         cursor: pointer;
-         padding: 0.5rem;
-         border-radius: 8px;
-         transition: all 0.2s ease;
-         position: relative;
-         width: 44px;
-         height: 44px;
-         display: flex;
-         align-items: center;
-         justify-content: center;
-         }
-         .hamburger:hover {
-         background: var(--primary-100);
-         }
-         .hamburger-lines {
-         width: 20px;
-         height: 16px;
-         position: relative;
-         transform: rotate(0deg);
-         transition: 0.3s ease-in-out;
-         }
-         .hamburger-lines span {
-         display: block;
-         position: absolute;
-         height: 2px;
-         width: 100%;
-         background: var(--primary-700);
-         border-radius: 2px;
-         opacity: 1;
-         left: 0;
-         transform: rotate(0deg);
-         transition: 0.25s ease-in-out;
-         }
-         .hamburger-lines span:nth-child(1) { top: 0px; }
-         .hamburger-lines span:nth-child(2) { top: 7px; }
-         .hamburger-lines span:nth-child(3) { top: 14px; }
-         .hamburger.active .hamburger-lines span:nth-child(1) {
-         top: 7px;
-         transform: rotate(135deg);
-         }
-         .hamburger.active .hamburger-lines span:nth-child(2) {
-         opacity: 0;
-         left: -20px;
-         }
-         .hamburger.active .hamburger-lines span:nth-child(3) {
-         top: 7px;
-         transform: rotate(-135deg);
-         }
-         .logo {
-         display: flex;
-         align-items: center;
-         gap: 0.75rem;
-         }
-         .logo-mark {
-         width: 36px;
-         height: 36px;
-         background: linear-gradient(135deg, var(--accent-600), var(--accent-500));
-         border-radius: 10px;
-         display: flex;
-         align-items: center;
-         justify-content: center;
-         color: white;
-         font-weight: 700;
-         font-size: 16px;
-         box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
-         }
-         .logo-text {
-         display: flex;
-         flex-direction: column;
-         line-height: 1.2;
-         }
-         .logo-primary {
-         font-size: 1.25rem;
-         font-weight: 700;
-         color: var(--primary-800);
-         }
-         .logo-secondary {
-         font-size: 0.75rem;
-         font-weight: 500;
-         color: var(--primary-500);
-         text-transform: uppercase;
-         letter-spacing: 0.5px;
-         }
-         .header-right {
-         display: flex;
-         align-items: center;
-         gap: 1rem;
-         }
-         .user-profile {
-         display: flex;
-         align-items: center;
-         gap: 0.75rem;
-         padding: 0.5rem 1rem;
-         border-radius: 12px;
-         background: var(--primary-50);
-         border: 1px solid var(--primary-200);
-         cursor: pointer;
-         transition: all 0.2s ease;
-         position: relative;
-         }
-         .user-profile:hover {
-         background: var(--primary-100);
-         border-color: var(--primary-300);
-         }
-         .user-avatar {
-         width: 32px;
-         height: 32px;
-         background: linear-gradient(135deg, var(--accent-500), var(--accent-600));
-         border-radius: 50%;
-         display: flex;
-         align-items: center;
-         justify-content: center;
-         color: white;
-         font-weight: 600;
-         font-size: 14px;
-         }
-         .user-info {
-         display: flex;
-         flex-direction: column;
-         line-height: 1.2;
-         }
-         .user-name {
-         font-size: 0.875rem;
-         font-weight: 600;
-         color: var(--primary-800);
-         }
-         .user-role {
-         font-size: 0.75rem;
-         color: var(--primary-500);
-         }
-         /* User Dropdown Menu */
-         .user-dropdown {
-         position: absolute;
-         top: 100%;
-         right: 0;
-         margin-top: 0.5rem;
-         background: white;
-         border: 1px solid var(--primary-200);
-         border-radius: 12px;
-         box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-         min-width: 200px;
-         opacity: 0;
-         visibility: hidden;
-         transform: translateY(-10px);
-         transition: all 0.3s ease;
-         z-index: 1001;
-         }
-         .user-dropdown.show {
-         opacity: 1;
-         visibility: visible;
-         transform: translateY(0);
-         }
-         .dropdown-header {
-         padding: 1rem;
-         border-bottom: 1px solid var(--primary-200);
-         }
-         .dropdown-user-info {
-         display: flex;
-         align-items: center;
-         gap: 0.75rem;
-         }
-         .dropdown-avatar {
-         width: 40px;
-         height: 40px;
-         background: linear-gradient(135deg, var(--accent-500), var(--accent-600));
-         border-radius: 50%;
-         display: flex;
-         align-items: center;
-         justify-content: center;
-         color: white;
-         font-weight: 600;
-         font-size: 16px;
-         }
-         .dropdown-user-details {
-         flex: 1;
-         }
-         .dropdown-user-name {
-         font-weight: 600;
-         color: var(--primary-800);
-         margin-bottom: 0.25rem;
-         }
-         .dropdown-user-role {
-         font-size: 0.75rem;
-         color: var(--primary-500);
-         }
-         .dropdown-menu {
-         padding: 0.5rem 0;
-         }
-         .dropdown-item {
-         display: flex;
-         align-items: center;
-         gap: 0.75rem;
-         padding: 0.75rem 1rem;
-         color: var(--primary-700);
-         text-decoration: none;
-         transition: all 0.2s ease;
-         cursor: pointer;
-         border: none;
-         background: none;
-         width: 100%;
-         text-align: left;
-         }
-         .dropdown-item:hover {
-         background: var(--primary-50);
-         color: var(--primary-800);
-         }
-         .dropdown-item.logout {
-         color: var(--error-600);
-         }
-         .dropdown-item.logout:hover {
-         background: var(--error-100);
-         color: var(--error-700);
-         }
-         .dropdown-icon {
-         width: 16px;
-         height: 16px;
-         display: flex;
-         align-items: center;
-         justify-content: center;
-         }
-         /* Logout Modal */
-         .logout-modal {
-         position: fixed;
-         top: 0;
-         left: 0;
-         width: 100%;
-         height: 100%;
-         background: rgba(0, 0, 0, 0.6);
-         backdrop-filter: blur(8px);
-         display: none;
-         justify-content: center;
-         align-items: center;
-         z-index: 2000;
-         opacity: 0;
-         transition: all 0.3s ease;
-         }
-         .logout-modal.show {
-         display: flex;
-         opacity: 1;
-         }
-         .logout-modal-content {
-         background: white;
-         padding: 2rem;
-         border-radius: 16px;
-         text-align: center;
-         box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
-         max-width: 400px;
-         width: 90%;
-         transform: scale(0.95);
-         transition: transform 0.3s ease;
-         }
-         .logout-modal.show .logout-modal-content {
-         transform: scale(1);
-         }
-         .logout-modal-icon {
-         width: 60px;
-         height: 60px;
-         background: var(--error-100);
-         border-radius: 50%;
-         display: flex;
-         align-items: center;
-         justify-content: center;
-         margin: 0 auto 1.5rem;
-         color: var(--error-600);
-         font-size: 24px;
-         }
-         .logout-modal-title {
-         font-size: 1.5rem;
-         font-weight: 700;
-         color: var(--primary-800);
-         margin-bottom: 0.5rem;
-         }
-         .logout-modal-message {
-         color: var(--primary-600);
-         margin-bottom: 2rem;
-         font-size: 1rem;
-         }
-         .logout-modal-actions {
-         display: flex;
-         gap: 1rem;
-         justify-content: center;
-         }
-         .logout-btn {
-         padding: 0.75rem 1.5rem;
-         border-radius: 8px;
-         font-weight: 600;
-         cursor: pointer;
-         transition: all 0.2s ease;
-         border: none;
-         font-size: 0.875rem;
-         }
-         .logout-btn.cancel {
-         background: var(--primary-100);
-         color: var(--primary-700);
-         border: 1px solid var(--primary-300);
-         }
-         .logout-btn.cancel:hover {
-         background: var(--primary-200);
-         border-color: var(--primary-400);
-         }
-         .logout-btn.confirm {
-         background: var(--error-500);
-         color: white;
-         }
-         .logout-btn.confirm:hover {
-         background: var(--error-600);
-         }
-         /* Sidebar Menu */
-         .sidebar {
-         position: fixed;
-         top: 0;
-         left: -320px;
-         width: 320px;
-         height: 100vh;
-         background: var(--primary-900);
-         transition: left 0.3s ease;
-         z-index: 1001;
-         overflow-y: auto;
-         }
-         .sidebar.open {
-         left: 0;
-         }
-         .sidebar-header {
-         padding: 2rem;
-         border-bottom: 1px solid var(--primary-700);
-         }
-         .sidebar-logo {
-         display: flex;
-         align-items: center;
-         gap: 1rem;
-         margin-bottom: 1rem;
-         }
-         .sidebar-logo-mark {
-         width: 40px;
-         height: 40px;
-         background: linear-gradient(135deg, var(--accent-500), var(--accent-600));
-         border-radius: 12px;
-         display: flex;
-         align-items: center;
-         justify-content: center;
-         color: white;
-         font-weight: 700;
-         font-size: 18px;
-         }
-         .sidebar-logo-text {
-         color: white;
-         font-size: 1.25rem;
-         font-weight: 700;
-         }
-         .sidebar-subtitle {
-         color: var(--primary-400);
-         font-size: 0.875rem;
-         margin-left: 0.25rem;
-         }
-         .sidebar-nav {
-         padding: 1rem 0;
-         }
-         .nav-section {
-         margin-bottom: 2rem;
-         }
-         .nav-section-title {
-         color: var(--primary-400);
-         font-size: 0.75rem;
-         font-weight: 600;
-         text-transform: uppercase;
-         letter-spacing: 0.5px;
-         padding: 0 2rem;
-         margin-bottom: 0.75rem;
-         }
-         .nav-item {
-         display: flex;
-         align-items: center;
-         gap: 1rem;
-         padding: 0.875rem 2rem;
-         color: var(--primary-300);
-         text-decoration: none;
-         transition: all 0.2s ease;
-         border-left: 3px solid transparent;
-         }
-         .nav-item:hover {
-         background: var(--primary-800);
-         color: white;
-         border-left-color: var(--accent-500);
-         }
-         .nav-item.active {
-         background: var(--primary-800);
-         color: white;
-         border-left-color: var(--accent-500);
-         }
-         .nav-icon {
-         width: 20px;
-         height: 20px;
-         display: flex;
-         align-items: center;
-         justify-content: center;
-         font-size: 16px;
-         }
-         .nav-text {
-         font-size: 0.875rem;
-         font-weight: 500;
-         }
-         .nav-badge {
-         background: var(--accent-500);
-         color: white;
-         font-size: 0.75rem;
-         padding: 0.125rem 0.5rem;
-         border-radius: 12px;
-         margin-left: auto;
-         }
-         /* Overlay */
-         .overlay {
-         position: fixed;
-         top: 0;
-         left: 0;
-         width: 100%;
-         height: 100%;
-         background: rgba(0, 0, 0, 0.5);
-         opacity: 0;
-         visibility: hidden;
-         transition: all 0.3s ease;
-         z-index: 1000;
-         }
-         .overlay.active {
-         opacity: 1;
-         visibility: visible;
-         }
-         /* Main Content */
-         .main-content {
-         padding: 0.5rem;
-         max-width: 1200px;
-         margin: 0 auto;
-         transition: margin-left 0.3s ease;
-         }
-         .breadcrumb {
-         display: flex;
-         align-items: center;
-         gap: 0.5rem;
-         margin-bottom: 2rem;
-         font-size: 0.875rem;
-         color: var(--primary-500);
-         }
-         .breadcrumb-item {
-         color: var(--primary-500);
-         text-decoration: none;
-         }
-         .breadcrumb-item:hover {
-         color: var(--accent-600);
-         }
-         .breadcrumb-item.current {
-         color: var(--primary-800);
-         font-weight: 500;
-         }
-         .page-hero {
-         background: white;
-         border-radius: 20px;
-         padding: 0.5rem;
-         margin-bottom: 0.5rem;
-         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-         border: 1px solid var(--primary-200);
-         position: relative;
-         overflow: hidden;
-         }
-         .page-hero::before {
-         content: '';
-         position: absolute;
-         top: 0;
-         right: 0;
-         width: 300px;
-         height: 300px;
-         background: linear-gradient(135deg, var(--accent-50), var(--accent-100));
-         border-radius: 50%;
-         transform: translate(100px, -100px);
-         opacity: 0.5;
-         }
-         .hero-content {
-         position: relative;
-         z-index: 1;
-         }
-         .hero-badge {
-         display: inline-flex;
-         align-items: center;
-         gap: 0.5rem;
-         background: var(--accent-100);
-         color: var(--accent-600);
-         padding: 0.5rem 1rem;
-         border-radius: 24px;
-         font-size: 0.875rem;
-         font-weight: 600;
-         margin-bottom: 1.5rem;
-         }
-         .hero-title {
-         font-size: 2rem;
-         font-weight: 800;
-         color: var(--primary-900);
-         margin-bottom: 1rem;
-         line-height: 1.1;
-         }
-         .hero-subtitle {
-         font-size: 1rem;
-         color: var(--primary-600);
-         margin-bottom: 0.5rem;
-         /* max-width: 600px; */
-         line-height: 1.6;
-         }
-         .hero-stats {
-         display: flex;
-         gap: 2rem;
-         }
-         .stat-item {
-         text-align: center;
-         }
-         .stat-number {
-         font-size: 2rem;
-         font-weight: 700;
-         color: var(--accent-600);
-         display: block;
-         }
-         .stat-label {
-         font-size: 0.875rem;
-         color: var(--primary-500);
-         font-weight: 500;
-         }
-         /* Upload Section */
-         .upload-container {
-         background: white;
-         border-radius: 20px;
-         padding: 0.5rem;
-         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-         border: 1px solid var(--primary-200);
-         }
-         .upload-header {
-         display: flex;
-         align-items: center;
-         justify-content: space-between;
-         margin-bottom: 0.5rem;
-         }
-         .upload-title {
-         font-size: 1.5rem;
-         font-weight: 700;
-         color: var(--primary-900);
-         }
-         .upload-help {
-         background: var(--primary-100);
-         border: none;
-         padding: 0.5rem;
-         border-radius: 8px;
-         cursor: pointer;
-         color: var(--primary-600);
-         font-size: 18px;
-         transition: all 0.2s ease;
-         }
-         .upload-help:hover {
-         background: var(--primary-200);
-         }
-         .upload-zone {
-         border: 2px dashed var(--primary-300);
-         border-radius: 16px;
-         padding: 0.5rem;
-         text-align: center;
-         transition: all 0.3s ease;
-         background: var(--primary-50);
-         position: relative;
-         cursor: pointer;
-         }
-         .upload-zone:hover {
-         border-color: var(--accent-500);
-         background: var(--accent-50);
-         transform: translateY(-2px);
-         }
-         .upload-zone.dragover {
-         border-color: var(--accent-500);
-         background: var(--accent-100);
-         transform: scale(1.02);
-         }
-         .upload-visual {
-         width: 60px;
-         height: 60px;
-         margin: 0 auto;
-         background: linear-gradient(135deg, var(--accent-500), var(--accent-600));
-         border-radius: 20px;
-         display: flex;
-         align-items: center;
-         justify-content: center;
-         color: white;
-         font-size: 32px;
-         }
-         .upload-title-text {
-         font-size: 1rem;
-         font-weight: 700;
-         color: var(--primary-900);
-         margin-bottom: 0.5rem;
-         }
-         .upload-subtitle-text {
-         color: var(--primary-600);
-         margin-bottom: 2rem;
-         font-size: 1rem;
-         }
-         .upload-actions {
-         display: flex;
-         gap: 1rem;
-         justify-content: center;
-         flex-wrap: wrap;
-         }
-         .btn {
-         padding: 0.875rem 1.5rem;
-         border-radius: 12px;
-         font-size: 0.875rem;
-         font-weight: 600;
-         cursor: pointer;
-         transition: all 0.2s ease;
-         border: none;
-         text-decoration: none;
-         display: inline-flex;
-         align-items: center;
-         gap: 0.5rem;
-         }
-         .btn-primary {
-         background: linear-gradient(135deg, var(--accent-600), var(--accent-500));
-         color: white;
-         box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
-         }
-         .btn-primary:hover {
-         transform: translateY(-2px);
-         box-shadow: 0 8px 20px rgba(37, 99, 235, 0.4);
-         }
-         .btn-secondary {
-         background: #4cd095;
-         color: var(--primary-700);
-         border: 1px solid var(--primary-300);
-         text-align: right;
-         }
-         .btn-secondary:hover {
-         background: var(--primary-200);
-         border-color: var(--primary-400);
-         }
-         .file-input {
-         display: none;
-         }
-         /* File Preview */
-         .file-preview {
-         background: var(--primary-50);
-         border: 1px solid var(--primary-200);
-         border-radius: 12px;
-         /* padding: 1.5rem; */
-         margin-top: 0.5rem;
-         display: none;
-         }
-         .file-preview.show {
-         display: block;
-         }
-         .file-item {
-         display: flex;
-         align-items: center;
-         gap: 1rem;
-         }
-         .file-type-icon {
-         width: 48px;
-         height: 48px;
-         background: var(--accent-100);
-         border-radius: 12px;
-         display: flex;
-         align-items: center;
-         justify-content: center;
-         color: var(--accent-600);
-         font-size: 20px;
-         }
-         .file-details {
-         flex: 1;
-         }
-         .file-name {
-         font-weight: 600;
-         color: var(--primary-800);
-         margin-bottom: 0.25rem;
-         }
-         .file-meta {
-         display: flex;
-         gap: 1rem;
-         font-size: 0.75rem;
-         color: var(--primary-500);
-         }
-         .file-actions {
-         display: flex;
-         gap: 0.5rem;
-         }
-         .file-action-btn {
-         background: var(--primary-100);
-         border: 1px solid var(--primary-300);
-         padding: 0.5rem;
-         border-radius: 8px;
-         cursor: pointer;
-         color: var(--primary-600);
-         transition: all 0.2s ease;
-         }
-         .file-action-btn:hover {
-         background: var(--primary-200);
-         color: var(--primary-800);
-         }
-         .process-section {
-         display: grid;
-         grid-template-columns: 1fr auto 1fr; /* left spacer | center | right */
-         align-items: center;
-         margin: 1rem;
-         width: 100%;
-         }
-         .process-buttons-container {
-         grid-column: 2;          /* center column */
-         justify-self: center;    /* force center */
-         }
-         .process-buttons-container-regenter {
-         grid-column: 3;          /* right column */
-         justify-self: end; 
-         padding-right: 1rem;      /* stick to the right */
-         }
-         /* Processing Section */
-         .processing-section {
-         background: white;
-         border-radius: 20px;
-         margin-top: 0.5rem;
-         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-         border: 1px solid var(--primary-200);
-         display: none;
-         }
-         .processing-section.show {
-         display: block;
-         }
-         .processing-header {
-         display: flex;
-         align-items: center;
-         justify-content: space-between;
-         margin-bottom: 2rem;
-         }
-         .processing-title {
-         font-size: 1.5rem;
-         font-weight: 700;
-         color: var(--primary-900);
-         }
-         .processing-status {
-         display: flex;
-         align-items: center;
-         gap: 0.5rem;
-         padding: 0.5rem 1rem;
-         border-radius: 24px;
-         font-size: 0.875rem;
-         font-weight: 600;
-         margin-bottom: 1rem;
-         }
-         .status-processing {
-         background: var(--warning-100);
-         color: var(--warning-600);
-         }
-         .status-completed {
-         background: var(--success-100);
-         color: var(--success-600);
-         }
-         .processing-progress {
-         margin-bottom: 2rem;
-         }
-         .progress-bar {
-         height: 8px;
-         background: var(--primary-100);
-         border-radius: 4px;
-         overflow: hidden;
-         }
-         .progress-fill {
-         height: 100%;
-         background: linear-gradient(to right, var(--accent-500), var(--accent-600));
-         border-radius: 4px;
-         width: 0%;
-         transition: width 0.5s ease;
-         }
-         .progress-labels {
-         display: flex;
-         justify-content: space-between;
-         margin-top: 0.5rem;
-         font-size: 0.875rem;
-         color: var(--primary-600);
-         }
-         .processing-details {
-         background: var(--primary-50);
-         border-radius: 12px;
-         padding: 1.5rem;
-         margin-bottom: 2rem;
-         }
-         .processing-details-title {
-         font-size: 1rem;
-         font-weight: 600;
-         color: var(--primary-800);
-         margin-bottom: 1rem;
-         }
-         .processing-steps {
-         display: flex;
-         flex-direction: column;
-         gap: 1rem;
-         }
-         .processing-step {
-         display: flex;
-         align-items: center;
-         gap: 1rem;
-         }
-         .step-icon {
-         width: 32px;
-         height: 32px;
-         border-radius: 50%;
-         display: flex;
-         align-items: center;
-         justify-content: center;
-         font-size: 14px;
-         font-weight: 600;
-         }
-         .step-icon.pending {
-         background: var(--primary-200);
-         color: var(--primary-600);
-         }
-         .step-icon.processing {
-         background: var(--warning-100);
-         color: var(--warning-600);
-         }
-         .step-icon.completed {
-         background: var(--success-100);
-         color: var(--success-600);
-         }
-         .step-text {
-         flex: 1;
-         font-size: 0.875rem;
-         color: var(--primary-700);
-         }
-         .step-time {
-         font-size: 0.75rem;
-         color: var(--primary-500);
-         }
-         .processing-actions {
-         display: flex;
-         align-items: center;
-         }
-         /* Results Section */
-         .results-section {
-         background: white;
-         border-radius: 20px;
-         padding: 0.5rem;
-         margin-top: 0.5rem;
-         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-         border: 1px solid var(--primary-200);
-         display: none;
-         }
-         .results-section.show {
-         display: block;
-         }
-         .results-header {
-         display: flex;
-         align-items: center;
-         justify-content: space-between;
-         margin-bottom: 0.5rem;
-         }
-         .results-title {
-         font-size: 1.5rem;
-         font-weight: 700;
-         color: var(--primary-900);
-         }
-         .results-actions {
-         display: flex;
-         justify-content: center;
-         align-items: center;
-         width: 100%;
-         gap:1rem;
-         }
-         .results-actions-feedback {
-         display: flex;
-         justify-content: right;
-         align-items: center;
-         width: 100%;
-         gap:1rem;
-         }
-         .results-actions-feedback {
-         margin-left: auto; /* This pushes the feedback button to the right */
-         }
-         /* .results-actions-center {
-         display: flex;
-         justify-content: center;
-         flex: 1;
-         }
-         .results-actions-right {
-         display: flex;
-         justify-content: flex-end;
-         flex: 1;
-         } */
-         .results-actions-container {
-         display: grid;
-         grid-template-columns: 1fr auto 1fr;
-         align-items: center;
-         width: 100%;
-         }
-         .results-actions-center {
-         grid-column: 2;
-         justify-self: center;
-         }
-         .results-actions-right {
-         grid-column: 3;
-         justify-self: end;
-         }
-         /* Mobile responsiveness */
-         @media (max-width: 768px) {
-         .results-actions-container {
-         grid-template-columns: 1fr;
-         gap: 1rem;
-         }
-         .results-actions-center,
-         .results-actions-right {
-         grid-column: 1;
-         justify-self: center;
-         width: 100%;
-         }
-         .results-actions-center {
-         order: 1;
-         }
-         .results-actions-right {
-         order: 2;
-         }
-         #downloadExcel,
-         #sendFeedback {
-         background: linear-gradient(135deg, var(--accent-600), var(--accent-500));
-         color: white;
-         box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
-         border: none;
-         }
-         #sendFeedback:hover {
-         background: linear-gradient(135deg, var(--accent-700), var(--accent-600));
-         transform: translateY(-2px);
-         box-shadow: 0 8px 20px rgba(37, 99, 235, 0.4);
-         }
-         }
-         .results-content {
-         margin-bottom: -1rem;
-         }
-         .results-summary {
-         display: grid;
-         grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-         gap: 1.5rem;
-         margin-bottom: 0.5rem;
-         }
-         .summary-card {
-         background: var(--primary-50);
-         border-radius: 12px;
-         padding: 0.5rem;
-         border: 1px solid var(--primary-200);
-         }
-         .summary-card-title {
-         font-size: 0.875rem;
-         font-weight: 600;
-         color: var(--primary-600);
-         margin-bottom: 0.5rem;
-         }
-         .summary-card-value {
-         font-size: 1.5rem;
-         font-weight: 700;
-         color: var(--primary-900);
-         }
-         .results-table {
-         width: 100%;
-         border-collapse: collapse;
-         margin-bottom: 2rem;
-         }
-         .results-table th {
-         text-align: center;
-         padding: 1rem;
-         background: var(--primary-50);
-         color: var(--primary-700);
-         font-weight: 600;
-         border-bottom: 1px solid var(--primary-200);
-         }
-         .results-table td {
-         text-align: center;
-         padding: 0.5rem;
-         border-bottom: 1px solid var(--primary-200);
-         color: var(--primary-700);
-         }
-         .results-table tr:last-child td {
-         border-bottom: none;
-         }
-         .results-footer {
-         display: flex;
-         justify-content: space-between;
-         align-items: center;
-         padding-top: 2rem;
-         border-top: 1px solid var(--primary-200);
-         }
-         .feedback-section {
-         display: flex;
-         align-items: center;
-         gap: 1rem;
-         }
-         .feedback-text {
-         font-size: 0.875rem;
-         color: var(--primary-600);
-         }
-         .feedback-actions {
-         display: flex;
-         gap: 0.5rem;
-         }
-         .feedback-btn {
-         background: var(--primary-100);
-         border: 1px solid var(--primary-300);
-         padding: 0.5rem 1rem;
-         border-radius: 8px;
-         cursor: pointer;
-         color: var(--primary-600);
-         font-size: 0.875rem;
-         transition: all 0.2s ease;
-         }
-         .feedback-btn:hover {
-         background: var(--primary-200);
-         color: var(--primary-800);
-         }
-         .feedback-btn.like.active {
-         background: var(--success-100);
-         color: var(--success-600);
-         border-color: var(--success-500);
-         }
-         .feedback-btn.dislike.active {
-         background: var(--error-100);
-         color: var(--error-600);
-         border-color: var(--error-500);
-         }
-         .download-btn {
-         background: linear-gradient(135deg, var(--success-600), var(--success-500));
-         color: white;
-         box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
-         }
-         .download-btn:hover {
-         transform: translateY(-2px);
-         box-shadow: 0 8px 20px rgba(22, 163, 74, 0.4);
-         }
-         /* Footer */
-         .footer {
-         background: white;
-         border-top: 1px solid var(--primary-200);
-         padding: 2rem;
-         margin-top: 4rem;
-         }
-         .footer-content {
-         max-width: 1200px;
-         margin: 0 auto;
-         display: flex;
-         justify-content: space-between;
-         align-items: center;
-         }
-         .footer-logo {
-         display: flex;
-         align-items: center;
-         gap: 0.75rem;
-         }
-         .footer-logo-mark {
-         width: 32px;
-         height: 32px;
-         background: linear-gradient(135deg, var(--accent-600), var(--accent-500));
-         border-radius: 8px;
-         display: flex;
-         align-items: center;
-         justify-content: center;
-         color: white;
-         font-weight: 700;
-         font-size: 14px;
-         }
-         .footer-logo-text {
-         font-size: 1rem;
-         font-weight: 700;
-         color: var(--primary-800);
-         }
-         .footer-links {
-         display: flex;
-         gap: 1.5rem;
-         }
-         .footer-link {
-         color: var(--primary-600);
-         text-decoration: none;
-         font-size: 0.875rem;
-         transition: color 0.2s ease;
-         }
-         .footer-link:hover {
-         color: var(--accent-600);
-         }
-         /* Mobile responsiveness */
-         @media (max-width: 768px) {
-         .process-buttons-container {
-         flex-direction: column;
-         gap: 1rem;
-         }
-         /* .results-actions {
-         flex-direction: column;
-         gap: 1rem;
-         } */
-         #regenerateButton {
-         margin-left: 0 !important;
-         width: 100%;
-         }
-         #downloadExcel {
-         margin: 0 auto !important;   /* center horizontally */
-         display: block !important;   /* required for margin auto */
-         width: fit-content !important; /* button takes only its content size */
-         }
-         }
-         /* Ensure proper spacing on mobile */
-         @media (max-width: 768px) {
-         .results-footer {
-         flex-direction: column;
-         gap: 1rem;
-         }
-         .results-actions-center,
-         .results-actions-right {
-         justify-content: center;
-         width: 100%;
-         }
-         .results-actions-center {
-         order: 2;
-         }
-         .results-actions-right {
-         order: 3;
-         }
-         }
-         /* Responsive */
-         @media (max-width: 768px) {
-         .header-content {
-         padding: 1rem;
-         }
-         @media (max-width: 768px) {
-         .process-buttons-container {
-         flex-direction: row;
-         justify-content: center;
-         }
-         }
-         .user-profile .user-info {
-         display: none;
-         }
-         .main-content {
-         padding: 2rem 1rem;
-         }
-         .page-hero {
-         padding: 2rem;
-         }
-         .hero-title {
-         font-size: 2rem;
-         }
-         .hero-subtitle {
-         font-size: 1rem;
-         }
-         .hero-stats {
-         flex-direction: column;
-         gap: 1rem;
-         }
-         .upload-container,
-         .processing-section,
-         .results-section {
-         padding: 1.5rem;
-         }
-         .upload-zone {
-         padding: 2rem 1rem;
-         }
-         .upload-actions {
-         flex-direction: column;
-         align-items: center;
-         }
-         .results-summary {
-         grid-template-columns: 1fr;
-         }
-         .results-footer {
-         display: flex;
-         justify-content: space-between;
-         align-items: center;
-         padding-top: 2rem;
-         border-top: 1px solid var(--primary-200);
-         width: 100%;
-         }
-         .footer-content {
-         flex-direction: column;
-         gap: 1rem;
-         text-align: center;
-         }
-         .footer-links {
-         flex-wrap: wrap;
-         justify-content: center;
-         }
-         }
-         /* Animation */
-         @keyframes pulse {
-         0% { transform: scale(1); }
-         50% { transform: scale(1.05); }
-         100% { transform: scale(1); }
-         }
-         .pulse {
-         animation: pulse 2s infinite;
-         }
-         @keyframes spin {
-         0% { transform: rotate(0deg); }
-         100% { transform: rotate(360deg); }
-         }
-         .spin {
-         animation: spin 1s linear infinite;
-         }
-         /* Help Modal Styles */
-         .help-modal {
-         position: fixed;
-         top: 0;
-         left: 0;
-         width: 100%;
-         height: 100%;
-         background: rgba(0, 0, 0, 0.6);
-         backdrop-filter: blur(8px);
-         display: none;
-         justify-content: center;
-         align-items: center;
-         z-index: 2000;
-         opacity: 0;
-         transition: all 0.3s ease;
-         }
-         .help-modal.show {
-         display: flex;
-         opacity: 1;
-         }
-         .help-modal-content {
-         background: white;
-         border-radius: 16px;
-         box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
-         max-width: 600px;
-         width: 90%;
-         max-height: 80vh;
-         overflow-y: auto;
-         transform: scale(0.95);
-         transition: transform 0.3s ease;
-         }
-         .help-modal.show .help-modal-content {
-         transform: scale(1);
-         }
-         /* header */
-         .help-modal-header {
-         display: flex;
-         justify-content: space-between;
-         align-items: center;
-         padding: 1.5rem 2rem;
-         border-bottom: 1px solid var(--primary-200);
-         background: var(--primary-50);
-         border-radius: 16px 16px 0 0;
-         }
-         .help-modal-close {
-         background: none;
-         border: none;
-         font-size: 2rem;
-         cursor: pointer;
-         color: var(--primary-600);
-         width: 40px;
-         height: 40px;
-         display: flex;
-         align-items: center;
-         justify-content: center;
-         border-radius: 8px;
-         transition: all 0.2s ease;
-         }
-         .help-modal-close:hover {
-         background: var(--primary-200);
-         color: var(--primary-800);
-         }
-         /* body */
-         .help-modal-body { padding: 2rem; }
-         .help-section { margin-bottom: 2rem; }
-         .help-section h4 { color: var(--primary-700); margin-bottom: 1rem; }
-         .help-section ul { padding-left: 1.5rem; color: var(--primary-600); }
-         .help-section li { margin-bottom: 0.5rem; }
-         .faq-item { margin-bottom: 1rem; border-bottom: 1px solid var(--primary-100); padding-bottom: 1rem; }
-         .faq-item strong { color: var(--primary-800); margin-bottom: 0.5rem; display: block; }
-         .faq-item p { color: var(--primary-600); margin: 0; }
-         .support-channels { display: flex; flex-direction: column; gap: 1rem; }
-         .support-item { gap: 1rem; align-items: center; }
-         .support-item span { font-weight: 600; color: var(--primary-700); min-width: 120px; }
-         .support-item a { color: var(--accent-600); text-decoration: none; }
-         .support-item a:hover { text-decoration: underline; color: var(--accent-700); }
-         /* Simplified Processing Section */
-         .processing-simple {
-         display: flex;
-         justify-content: space-between;
-         align-items: center;
-         padding: 2rem;
-         }
-         .processing-message {
-         color: var(--primary-600);
-         font-size: 1rem;
-         }
-         .processing-message p {
-         margin: 0;
-         }
-         .processing-content {
-         display: flex;
-         flex-direction: column;
-         align-items: center;
-         flex: 1;
-         text-align: center;
-         }
-      </style>
-   </head>
-   <body>
-      <!-- Header -->
-      <header class="header">
-         <div class="header-content">
-            <div class="header-left">
-               <button class="hamburger" id="hamburger">
-                  <div class="hamburger-lines">
-                     <span></span>
-                     <span></span>
-                     <span></span>
-                  </div>
-               </button>
-               <div class="logo">
-                  <div class="logo-mark">PPA</div>
-                  <div class="logo-text">
-                     <span class="logo-primary">Project Plan Agent</span>
-                     <span class="logo-secondary">NTT DATA Business Solutions</span>
-                  </div>
-               </div>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Plan Agent</title>
+    <link rel="stylesheet" href="/static/tailwind.css">
+    <link rel="stylesheet" href="/static/style.css">
+    <script>
+        async function loginUser(event) {
+            event.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const result = await response.json();
+                if (result.status === 'success') {
+                    localStorage.setItem('session_id', result.session_id);
+                    localStorage.setItem('user_role', result.user_role);
+                    localStorage.setItem('user_email', result.user_email);
+                    updateUI(result.user_role, result.user_email);
+                    // Update download links with session_id
+                    updateDownloadLinks(result.session_id);
+                } else {
+                    alert(result.detail || 'Login failed');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        async function uploadFile(event) {
+            event.preventDefault();
+            const sessionId = localStorage.getItem('session_id');
+            const fileInput = document.getElementById('file-upload');
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    headers: { 'x-session-id': sessionId },
+                    body: formData
+                });
+                const result = await response.json();
+                if (result.status === 'success') {
+                    document.getElementById('upload-status').innerText = 'Processing complete! Download your report.';
+                    document.getElementById('download-sow').style.display = 'inline-block';
+                    // Update download link with session_id
+                    updateDownloadLinks(sessionId);
+                } else {
+                    document.getElementById('upload-status').innerText = result.detail || 'Upload failed';
+                }
+            } catch (error) {
+                document.getElementById('upload-status').innerText = 'Error: ' + error.message;
+            }
+        }
+
+        async function refreshTokenPreview() {
+            const sessionId = localStorage.getItem('session_id');
+            try {
+                const response = await fetch(`/token-preview/${sessionId}`, {
+                    headers: { 'x-session-id': sessionId }
+                });
+                const result = await response.json();
+                if (result.status === 'success') {
+                    const tableBody = document.getElementById('token-preview-body');
+                    tableBody.innerHTML = '';
+                    result.data.forEach(row => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td class="px-4 py-2">${row.Email}</td>
+                            <td class="px-4 py-2">${row.Username}</td>
+                            <td class="px-4 py-2">${row['File Name']}</td>
+                            <td class="px-4 py-2">${row['Total Tokens']}</td>
+                            <td class="px-4 py-2">${row['User Login Time']}</td>
+                            <td class="px-4 py-2">${row['AI Response Time (minutes)']}</td>
+                            <td class="px-4 py-2">${row['User Logout Time']}</td>
+                        `;
+                        tableBody.appendChild(tr);
+                    });
+                } else {
+                    alert(result.detail || 'Failed to load preview');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        async function logoutUser() {
+            const sessionId = localStorage.getItem('session_id');
+            try {
+                await fetch(`/logout/${sessionId}`);
+                localStorage.clear();
+                showLogin();
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        function updateUI(role, email) {
+            document.getElementById('login-section').style.display = 'none';
+            document.getElementById('main-section').style.display = 'flex';
+            document.getElementById('user-email').innerText = email;
+            document.getElementById('user-role').innerText = role === 'admin' ? 'Admin' : 'Project Manager';
+            if (role === 'admin') {
+                document.getElementById('upload-section').style.display = 'none';
+                document.getElementById('admin-section').style.display = 'block';
+            } else {
+                document.getElementById('upload-section').style.display = 'block';
+                document.getElementById('admin-section').style.display = 'none';
+            }
+        }
+
+        function showLogin() {
+            document.getElementById('login-section').style.display = 'block';
+            document.getElementById('main-section').style.display = 'none';
+        }
+
+        function updateDownloadLinks(sessionId) {
+            document.getElementById('download-sow').href = `/download/${sessionId}/sow_report`;
+            document.getElementById('download-token').href = `/download/${sessionId}/token_report`;
+        }
+
+        window.onload = () => {
+            const sessionId = localStorage.getItem('session_id');
+            if (sessionId) {
+                updateUI(localStorage.getItem('user_role'), localStorage.getItem('user_email'));
+                updateDownloadLinks(sessionId);
+            } else {
+                showLogin();
+            }
+        };
+    </script>
+</head>
+<body class="bg-gray-100 font-sans">
+    <!-- Login Section -->
+    <section id="login-section" class="min-h-screen flex items-center justify-center">
+        <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
+            <div class="flex items-center justify-center mb-6">
+                <span class="text-3xl font-bold text-blue-600">N</span>
+                <div class="ml-2">
+                    <h1 class="text-xl font-bold text-gray-800">NTT DATA</h1>
+                    <p class="text-sm text-gray-600">Enterprise AI Platform</p>
+                </div>
             </div>
-            <div class="header-right">
-               <div class="user-profile" id="userProfile">
-                  <div class="user-avatar" id="userAvatar">--</div>
-                  <div class="user-info">
-                     <span class="user-name" id="userName">Loading...</span>
-                     <span class="user-role" id="userRole">--</span>
-                  </div>
-                  <!-- User Dropdown -->
-                  <div class="user-dropdown" id="userDropdown">
-                     <div class="dropdown-header">
-                        <div class="dropdown-user-info">
-                           <div class="dropdown-avatar" id="dropdownAvatar">--</div>
-                           <div class="dropdown-user-details">
-                              <div class="dropdown-user-name" id="dropdownUserName">--</div>
-                              <div class="dropdown-user-role" id="dropdownUserRole">--</div>
-                           </div>
+            <h2 class="text-2xl font-semibold text-gray-800 mb-2 text-center">🔐 User Login</h2>
+            <p class="text-sm text-gray-600 mb-6 text-center">Please enter your credentials to continue</p>
+            <form onsubmit="loginUser(event)">
+                <div class="mb-4">
+                    <label for="username" class="block text-sm font-medium text-gray-700">Username:</label>
+                    <input id="username" type="text" class="w-full p-2 border rounded-md" required>
+                </div>
+                <div class="mb-4">
+                    <label for="password" class="block text-sm font-medium text-gray-700">Password:</label>
+                    <input id="password" type="password" class="w-full p-2 border rounded-md" required>
+                </div>
+                <button type="submit" class="w-full bg-blue-600 text-white p-2 rounded-md hover:bg-blue-700">Login</button>
+            </form>
+            <div class="mt-4 text-sm text-gray-600">
+                <p><strong>Test Users:</strong></p>
+                <ul class="list-disc pl-5">
+                    <li>Admin: admin / adminpass (admin@nttdata.com)</li>
+                    <li>User 1: user1 / userpass (user1@nttdata.com)</li>
+                    <li>User 2: user2 / userpass (user2@nttdata.com)</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Main Section -->
+    <section id="main-section" class="min-h-screen hidden">
+        <div class="flex">
+            <!-- Sidebar -->
+            <aside class="w-64 bg-blue-800 text-white p-6">
+                <div class="flex items-center mb-8">
+                    <span class="text-3xl font-bold">N</span>
+                    <div class="ml-2">
+                        <h1 class="text-lg font-bold">NTT DATA</h1>
+                        <p class="text-xs">AI Platform</p>
+                    </div>
+                </div>
+                <div class="mb-8">
+                    <div class="flex items-center">
+                        <span class="text-2xl font-bold bg-gray-200 text-gray-800 w-10 h-10 flex items-center justify-center rounded-full">JD</span>
+                        <div class="ml-2">
+                            <p id="user-email" class="text-sm font-semibold">john.doe@example.com</p>
+                            <p id="user-role" class="text-xs">Project Manager</p>
                         </div>
-                     </div>
-                     <div class="dropdown-menu">
-                        <button class="dropdown-item">
-                           <div class="dropdown-icon">👤</div>
-                           <span>Profile</span>
-                        </button>
-                        <button class="dropdown-item">
-                           <div class="dropdown-icon">⚙️</div>
-                           <span>Settings</span>
-                        </button>
-                        <button class="dropdown-item logout" id="logoutBtn">
-                           <div class="dropdown-icon">🚪</div>
-                           <span>Logout</span>
-                        </button>
-                     </div>
-                  </div>
-               </div>
-            </div>
-         </div>
-      </header>
-      <!-- Logout Modal -->
-      <div class="logout-modal" id="logoutModal">
-         <div class="logout-modal-content">
-            <div class="logout-modal-icon">🚪</div>
-            <h3 class="logout-modal-title">Confirm Logout</h3>
-            <p class="logout-modal-message">Are you sure you want to logout? You will need to login again to access the dashboard.</p>
-            <div class="logout-modal-actions">
-               <button class="logout-btn cancel" id="logoutCancel">Cancel</button>
-               <button class="logout-btn confirm" id="logoutConfirm">Yes, Logout</button>
-            </div>
-         </div>
-      </div>
-      <!-- Sidebar Menu -->
-      <div class="sidebar" id="sidebar">
-         <div class="sidebar-header">
-            <div class="sidebar-logo">
-               <div class="sidebar-logo-mark">PPA</div>
-               <div class="sidebar-logo-text">Project Plan Agent</div>
-            </div>
-            <div class="sidebar-subtitle">NTT DATA Business Solutions</div>
-         </div>
-         <nav class="sidebar-nav">
-            <div class="nav-section">
-               <div class="nav-section-title">Main</div>
-               <!-- <a href="#" class="nav-item active">
-                  <div class="nav-icon">📋</div>
-                  <div class="nav-text">Project Planning</div> 
-                  </a> -->
-               <a href="/dashboard" class="nav-item">
-                  <div class="nav-icon">📊</div>
-                  <div class="nav-text">Dashboard</div>
-               </a>
-               <a href="#" class="nav-item">
-                  <div class="nav-icon">📂</div>
-                  <div class="nav-text">Projects</div>
-               </a>
-            </div>
-            <div class="nav-section">
-               <div class="nav-section-title">Tools</div>
-               <!-- <a href="#" class="nav-item">
-                  <div class="nav-icon">🔗</div>
-                  <div class="nav-text">Integrations</div>
-                  </a>
-                  <a href="#" class="nav-item">
-                  <div class="nav-icon">⚙️</div>
-                  <div class="nav-text">Settings</div>
-                  </a> -->
-               <a href="#" class="nav-item">
-                  <div class="nav-icon">❓</div>
-                  <div class="nav-text">Help & Support</div>
-                  <!-- <div class="nav-badge">New</div> -->
-               </a>
-            </div>
-         </nav>
-      </div>
-      <!-- Overlay -->
-      <div class="overlay" id="overlay"></div>
-      <!-- Main Content -->
-      <main class="main-content">
-         <!-- <div class="breadcrumb">
-            <a href="#" class="breadcrumb-item">Home</a>
-            <span>/</span>
-            <a href="#" class="breadcrumb-item">Tools</a>
-            <span>/</span>
-            <span class="breadcrumb-item current">Project Plan Agent</span>
-            </div> -->
-         <div class="page-hero">
-            <div class="hero-content">
-               <div class="hero-badge">
-                  <span>✨</span>
-                  AI-Powered Project Planning
-               </div>
-               <h1 class="hero-title">Transform Requirements into Actionable Plans</h1>
-               <p class="hero-subtitle">Upload your Statement of Work (SOW) PDF and let our AI generate a comprehensive project plan with timelines, resources, and milestones.</p>
-               <div class="hero-stats">
-                  <!-- <div class="stat-item">
-                     <span class="stat-number">98%</span>
-                     <span class="stat-label">Accuracy</span>
-                     </div>
-                     <div class="stat-item">
-                     <span class="stat-number">5x</span>
-                     <span class="stat-label">Faster Planning</span>
-                     </div>
-                     <div class="stat-item">
-                     <span class="stat-number">500+</span>
-                     <span class="stat-label">Projects Analyzed</span>
-                     </div> -->
-               </div>
-            </div>
-         </div>
-         <!-- Upload Section -->
-         <div class="upload-container">
-            <div class="upload-header">
-               <h2 class="upload-title">Upload Statement of Work (SOW)</h2>
-               <!-- <button class="upload-help" title="Help">❓</button> -->
-            </div>
-            <div class="upload-zone" id="uploadZone">
-               <div class="upload-visual">📄</div>
-               <h3 class="upload-title-text">Drag & Drop your PDF file here</h3>
-               <!-- <p class="upload-subtitle-text">Supported format: PDF</p> -->
-               <div class="upload-actions">
-                  <button class="btn btn-primary" id="browseBtn">
-                  <span>Browse Files</span>
-                  </button>
-               </div>
-               <input type="file" id="fileInput" class="file-input" accept=".pdf">
-            </div>
-            <div class="file-preview" id="filePreview">
-               <div class="file-item">
-                  <div class="file-type-icon">📄</div>
-                  <div class="file-details">
-                     <div class="file-name" id="fileName">No file selected</div>
-                     <div class="file-meta">
-                        <span id="fileSize">0 KB</span>
-                        <span id="fileStatus">Ready to upload</span>
-                     </div>
-                  </div>
-                  <div class="file-actions">
-                     <button class="file-action-btn" id="removeFileBtn" title="Remove">🗑️</button>
-                  </div>
-               </div>
-            </div>
-            <!-- Process Section -->
-            <div class="process-section">
-               <div class="process-buttons-container">
-                  <button class="btn btn-primary" id="processButton" disabled>
-                  <span>🚀</span>
-                  <span>Process SOW Document</span>
-                  </button>
-               </div>
-               <div class="process-buttons-container-regenter"> 
-                  <button class="btn btn-secondary" id="regenerateButton" style="display: none;">
-                  <span>🔄</span>
-                  <span>Regenerate</span>
-                  </button>
-               </div>
-            </div>
-         </div>
-         <!-- Processing Section -->
-         <!-- Processing Section -->
-         <div class="processing-section" id="processingSection">
-            <div class="processing-simple">
-               <div class="processing-content">
-                  <div class="processing-status status-processing">
-                     <span class="spin">⏳</span>
-                     <span>Processing</span>
-                  </div>
-                  <div class="processing-message">
-                     <p>Your document is being processed. This may take a few moments...</p>
-                  </div>
-               </div>
-               <div class="processing-actions">
-                  <button class="btn btn-secondary" id="cancelProcessingBtn">Cancel</button>
-               </div>
-            </div>
-         </div>
-         <!-- Results Section -->
-         <div class="results-section" id="resultsSection">
-            <div class="results-header">
-               <h2 class="results-title">Project Plan Generated</h2>
-            </div>
-            <div class="results-content">
-               <div class="results-summary">
-                  <div class="summary-card">
-                     <div class="summary-card-title">Project Duration</div>
-                     <div class="summary-card-value" id="durationValue">--</div>
-                  </div>
-                  <div class="summary-card">
-                     <div class="summary-card-title">Tasks Completed</div>
-                     <div class="summary-card-value" id="completedTasksValue">--</div>
-                  </div>
-                  <div class="summary-card">
-                     <div class="summary-card-title">Phases</div>
-                     <div class="summary-card-value" id="totalPhasesValue">--</div>
-                  </div>
-               </div>
-               <div id="resultsTableContainer">
-                  <!-- Results table will be populated here -->
-               </div>
-            </div>
-            <div class="results-footer">
-               <div class="results-actions-container">
-                  <div class="results-actions-center">
-                     <a class="btn btn-primary download-btn" id="downloadExcel" href="#" download="AI-Generated_SOW_Document.xlsx">
-                     <span>📊</span>
-                     <span>Download Excel</span>
-                     </a>
-                  </div>
-                  <div class="results-actions-right">
-                     <a class="btn btn-secondary" id="sendFeedback" href="https://forms.microsoft.com/e/ngwFzP8MrG" target="_blank" rel="noopener noreferrer">
-                     <span>📩</span>
-                     <span>Send Feedback</span>
-                     </a>
-                  </div>
-               </div>
-            </div>
-         </div>
-         <!-- Help & Support Modal -->
-         <div class="help-modal" id="helpModal">
-            <div class="help-modal-content">
-               <div class="help-modal-header">
-                  <h3>Help & Support</h3>
-                  <button class="help-modal-close" id="helpModalClose">&times;</button>
-               </div>
-               <div class="help-modal-body">
-                  <div class="help-section">
-                     <h4>📖 How to Use</h4>
-                     <ul>
-                        <li>Upload a PDF Statement of Work (SOW) document</li>
-                        <li>Click "Process SOW Document" to analyze</li>
-                        <li>Download the generated Excel project plan</li>
-                        <li>Use "Regenerate" if you need to reprocess</li>
-                     </ul>
-                  </div>
-                  <div class="help-section">
-                     <h4>❓ Frequently Asked Questions</h4>
-                     <div class="faq-item">
-                        <strong>Q: What PDF format is supported?</strong>
-                        <p>A: Standard PDF files with readable text.</p>
-                     </div>
-                     <div class="faq-item">
-                        <strong>Q: Maximum file size?</strong>
-                        <p>A: 50MB per PDF file.</p>
-                     </div>
-                     <div class="faq-item">
-                        <strong>Q: How long does processing take?</strong>
-                        <p>A: Typically 1-3 minutes depending on document size.</p>
-                     </div>
-                  </div>
-                  <div class="help-section">
-                     <h4>📞 Support Channels</h4>
-                     <div class="support-channels">
-                        <div class="support-item">
-                           <span>📧 Email:</span>
-                           <a href="mailto:Brahmananda.Upparapalli@bs.nttdata.com">Brahmananda.Upparapalli@bs.nttdata.com</a>
+                    </div>
+                </div>
+                <nav>
+                    <h3 class="text-xs font-semibold uppercase mb-2">Main</h3>
+                    <ul class="space-y-2">
+                        <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">🏠</span> Dashboard</a></li>
+                        <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded" onclick="document.getElementById('admin-section').style.display='block';document.getElementById('upload-section').style.display='none';"><span class="mr-2">📊</span> Project Analytics</a></li>
+                        <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded" onclick="document.getElementById('upload-section').style.display='block';document.getElementById('admin-section').style.display='none';"><span class="mr-2">📁</span> File Manager</a></li>
+                    </ul>
+                    <h3 class="text-xs font-semibold uppercase mt-4 mb-2">Resources</h3>
+                    <ul class="space-y-2">
+                        <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">📖</span> Documentation</a></li>
+                        <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">🔧</span> API Reference</a></li>
+                        <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">🎓</span> Training Materials</a></li>
+                        <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">📋</span> Release Notes <span class="ml-1 bg-red-500 text-xs px-1 rounded">New</span></a></li>
+                    </ul>
+                    <h3 class="text-xs font-semibold uppercase mt-4 mb-2">Support</h3>
+                    <ul class="space-y-2">
+                        <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">💬</span> Contact Support</a></li>
+                        <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">❓</span> Help Center</a></li>
+                        <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">📊</span> System Status</a></li>
+                        <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">🎫</span> Submit Ticket</a></li>
+                    </ul>
+                    <h3 class="text-xs font-semibold uppercase mt-4 mb-2">Account</h3>
+                    <ul class="space-y-2">
+                        <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">⚙️</span> Settings</a></li>
+                        <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">👤</span> Profile</a></li>
+                        <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">🔐</span> Security</a></li>
+                        <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded"><span class="mr-2">ℹ️</span> About</a></li>
+                        <li><a href="#" class="flex items-center text-sm hover:bg-blue-700 p-2 rounded" onclick="logoutUser()"><span class="mr-2">🚪</span> Logout</a></li>
+                    </ul>
+                </nav>
+            </aside>
+            <!-- Main Content -->
+            <main class="flex-1 p-8">
+                <nav class="text-sm text-gray-600 mb-4">
+                    <a href="#" class="hover:text-blue-600">Home</a> ›
+                    <a href="#" class="hover:text-blue-600">AI Tools</a> ›
+                    <span class="text-gray-800">Project Plan Agent</span>
+                </nav>
+                <header class="mb-8">
+                    <div class="flex items-center mb-2">
+                        <span class="text-2xl mr-2">🤖</span>
+                        <span class="text-sm text-blue-600">AI-Powered • RISE Project Initiative</span>
+                    </div>
+                    <h1 class="text-3xl font-bold text-gray-800">Project Plan Agent</h1>
+                    <p class="text-gray-600 mt-2">Transform your Statement of Work into comprehensive project plans with intelligent AI analysis. Generate timelines, identify risks, and optimize resource allocation automatically.</p>
+                    <div class="flex space-x-4 mt-4">
+                        <div class="text-center">
+                            <p class="text-2xl font-semibold text-gray-800">247</p>
+                            <p class="text-sm text-gray-600">Projects Processed</p>
                         </div>
-                        <div class="support-item">
-                           <span>📋 Documentation:</span>
-                           <a href="https://itellicloud-my.sharepoint.com/:b:/g/personal/kausthub_k_bs_nttdata_com/EbWSCMS1ipJOi5TCMRRkyvgBgrYT-VBNebmZIjZTt83ldA?e=J1WMRe" target="_blank">User Guide</a>
+                        <div class="text-center">
+                            <p class="text-2xl font-semibold text-gray-800">95%</p>
+                            <p class="text-sm text-gray-600">Accuracy Rate</p>
                         </div>
-                        <div class="support-item">
-                           <span>🐛 Report Issues:</span>
-                           <a href="https://forms.microsoft.com/e/ngwFzP8MrG" target="_blank">Feedback Form</a>
+                        <div class="text-center">
+                            <p class="text-2xl font-semibold text-gray-800">67h</p>
+                            <p class="text-sm text-gray-600">Time Saved</p>
                         </div>
-                     </div>
-                  </div>
-               </div>
-            </div>
-         </div>
-      </main>
-      <!-- Footer -->
-      <footer class="footer">
-         <div class="footer-content">
-            <div class="footer-logo">
-               <div class="footer-logo-mark">PPA</div>
-               <div class="footer-logo-text">Project Plan Agent</div>
-            </div>
-            <div class="footer-links">
-               <a href="#" class="footer-link">Privacy Policy</a>
-               <a href="#" class="footer-link">Terms of Service</a>
-               <a href="#" class="footer-link">Contact Us</a>
-               <a href="https://itellicloud-my.sharepoint.com/:b:/g/personal/kausthub_k_bs_nttdata_com/EbWSCMS1ipJOi5TCMRRkyvgBgrYT-VBNebmZIjZTt83ldA?e=J1WMRe" target="_blank" class="footer-link">Documentation</a>
-            </div>
-         </div>
-      </footer>
-      <script>
-         // Global variables
-         let currentFile = null;
-         let processingInterval = null;
-         let currentUser = null;
-         
-         // DOM Elements
-         const hamburger = document.getElementById('hamburger');
-         const sidebar = document.getElementById('sidebar');
-         const overlay = document.getElementById('overlay');
-         const uploadZone = document.getElementById('uploadZone');
-         const fileInput = document.getElementById('fileInput');
-         const browseBtn = document.getElementById('browseBtn');
-         const fileName = document.getElementById('fileName');
-         const fileSize = document.getElementById('fileSize');
-         const fileStatus = document.getElementById('fileStatus');
-         const filePreview = document.getElementById('filePreview');
-         const removeFileBtn = document.getElementById('removeFileBtn');
-         const processButton = document.getElementById('processButton');
-         const regenerateButton = document.getElementById('regenerateButton');
-         const processingSection = document.getElementById('processingSection');
-         const progressFill = document.getElementById('progressFill');
-         const progressPercentage = document.getElementById('progressPercentage');
-         const step1Time = document.getElementById('step1Time');
-         const step2Time = document.getElementById('step2Time');
-         const step3Time = document.getElementById('step3Time');
-         const step4Time = document.getElementById('step4Time');
-         const cancelProcessingBtn = document.getElementById('cancelProcessingBtn');
-         const resultsSection = document.getElementById('resultsSection');
-         const durationValue = document.getElementById('durationValue');
-         const completedTasksValue = document.getElementById('completedTasksValue');
-         const totalPhasesValue = document.getElementById('totalPhasesValue');
-         const resultsTableContainer = document.getElementById('resultsTableContainer');
-         // Removed like/dislike buttons as they are not present in the HTML
-         const downloadExcel = document.getElementById('downloadExcel');
-         const sendFeedback = document.getElementById('sendFeedback');
-         
-         // User profile elements
-         const userProfile = document.getElementById('userProfile');
-         const userAvatar = document.getElementById('userAvatar');
-         const userName = document.getElementById('userName');
-         const userRole = document.getElementById('userRole');
-         const userDropdown = document.getElementById('userDropdown');
-         const dropdownAvatar = document.getElementById('dropdownAvatar');
-         const dropdownUserName = document.getElementById('dropdownUserName');
-         const dropdownUserRole = document.getElementById('dropdownUserRole');
-         const logoutBtn = document.getElementById('logoutBtn');
-         const logoutModal = document.getElementById('logoutModal');
-         const logoutCancel = document.getElementById('logoutCancel');
-         const logoutConfirm = document.getElementById('logoutConfirm');
-         
-         // Initialize the app
-         document.addEventListener('DOMContentLoaded', function() {
-             loadUserInfo();
-             initializeEventListeners();
-         });
-         
-         // Load user information from backend
-         async function loadUserInfo() {
-             try {
-                 const response = await fetch('/api/user');
-                 if (response.ok) {
-                     currentUser = await response.json();
-                     updateUserUI(currentUser);
-                 } else if (response.status === 401) {
-                     // User not authenticated, redirect to login
-                     window.location.href = '/login';
-                 } else {
-                     console.error('Failed to load user info');
-                     showGenericUser();
-                 }
-             } catch (error) {
-                 console.error('Error loading user info:', error);
-                 showGenericUser();
-             }
-         }
-         
-         // Update UI with user information
-         function updateUserUI(user) {
-             const initials = getInitials(user.name);
-             
-             // Update header user info
-             userAvatar.textContent = initials;
-             userName.textContent = user.name;
-             userRole.textContent = user.role;
-         
-             // Update dropdown user info
-             dropdownAvatar.textContent = initials;
-             dropdownUserName.textContent = user.name;
-             dropdownUserRole.textContent = user.role;
-         }
-         
-         // Show generic user info as fallback
-         function showGenericUser() {
-             const fallbackUser = { name: 'User', role: 'Member' };
-             updateUserUI(fallbackUser);
-         }
-         
-         // Get initials from name
-         function getInitials(name) {
-             if (!name) return 'UN';
-             const parts = name.trim().split(' ');
-             if (parts.length >= 2) {
-                 return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-             } else if (parts.length === 1) {
-                 return parts[0].substring(0, 2).toUpperCase();
-             } else {
-                 return 'UN';
-             }
-         }
-         
-         // Initialize event listeners
-         function initializeEventListeners() {
-             // Toggle Sidebar
-             hamburger.addEventListener('click', () => {
-                 hamburger.classList.toggle('active');
-                 sidebar.classList.toggle('open');
-                 overlay.classList.toggle('active');
-             });
-         
-             // Close Sidebar when clicking on overlay
-             overlay.addEventListener('click', () => {
-                 hamburger.classList.remove('active');
-                 sidebar.classList.remove('open');
-                 overlay.classList.remove('active');
-                 userDropdown.classList.remove('show');
-             });
-         
-             // User profile dropdown
-             userProfile.addEventListener('click', (e) => {
-                 e.stopPropagation();
-                 userDropdown.classList.toggle('show');
-             });
-         
-             // Close dropdown when clicking outside
-             document.addEventListener('click', (e) => {
-                 if (!userProfile.contains(e.target)) {
-                     userDropdown.classList.remove('show');
-                 }
-             });
-         
-             // Logout functionality
-             logoutBtn.addEventListener('click', (e) => {
-                 e.preventDefault();
-                 userDropdown.classList.remove('show');
-                 logoutModal.classList.add('show');
-             });
-         
-             logoutCancel.addEventListener('click', () => {
-                 logoutModal.classList.remove('show');
-             });
-         
-             logoutConfirm.addEventListener('click', async () => {
-                 try {
-                     const response = await fetch('/logout', {
-                         method: 'POST',
-                         headers: {
-                             'Content-Type': 'application/json',
-                         }
-                     });
-                     
-                     if (response.ok) {
-                         // Clear any cached data
-                         currentUser = null;
-                         currentFile = null;
-                         
-                         // Redirect to login
-                         window.location.href = '/login';
-                     } else {
-                         alert('Logout failed. Please try again.');
-                         logoutModal.classList.remove('show');
-                     }
-                 } catch (error) {
-                     console.error('Logout error:', error);
-                     alert('Logout failed. Please try again.');
-                     logoutModal.classList.remove('show');
-                 }
-             });
-         
-             // Close logout modal when clicking outside
-             logoutModal.addEventListener('click', (e) => {
-                 if (e.target === logoutModal) {
-                     logoutModal.classList.remove('show');
-                 }
-             });
-         
-             // File Upload Handling
-             browseBtn.addEventListener('click', () => {
-                 fileInput.click();
-             });
-         
-             fileInput.addEventListener('change', (e) => {
-                 if (e.target.files.length > 0) {
-                     handleFileUpload(e.target.files[0]);
-                 }
-             });
-         
-             uploadZone.addEventListener('dragover', (e) => {
-                 e.preventDefault();
-                 uploadZone.classList.add('dragover');
-             });
-         
-             uploadZone.addEventListener('dragleave', () => {
-                 uploadZone.classList.remove('dragover');
-             });
-         
-             uploadZone.addEventListener('drop', (e) => {
-                 e.preventDefault();
-                 uploadZone.classList.remove('dragover');
-                 if (e.dataTransfer.files.length > 0) {
-                     handleFileUpload(e.dataTransfer.files[0]);
-                 }
-             });
-         
-             removeFileBtn.addEventListener('click', () => {
-                 resetFileInput();
-             });
-         
-             processButton.addEventListener('click', () => {
-                 if (currentFile) {
-                     processFile(currentFile);
-                 }
-             });
-         
-             // Regenerate button functionality
-             regenerateButton.addEventListener('click', () => {
-                 if (currentFile) {
-                     processFile(currentFile);
-                 }
-             });
-         
-             cancelProcessingBtn.addEventListener('click', () => {
-                 cancelProcessing();
-             });
-         
-             // Removed like/dislike event listeners as the buttons do not exist
-         }
-         
-         // File handling functions
-         function handleFileUpload(file) {
-             // Validate file type
-             if (file.type !== 'application/pdf') {
-                 alert('Please select a PDF file');
-                 return;
-             }
-         
-             // Validate file size (max 10MB)
-             if (file.size > 10 * 1024 * 1024) {
-                 alert('File size exceeds 10MB limit');
-                 return;
-             }
-         
-             currentFile = file;
-             
-             // Show file preview
-             fileName.textContent = file.name;
-             fileSize.textContent = formatFileSize(file.size);
-             fileStatus.textContent = 'Ready to process';
-             
-             filePreview.classList.add('show');
-             processButton.disabled = false;
-             regenerateButton.style.display = 'none'; // Hide regenerate button initially
-         }
-         
-         function resetFileInput() {
-             fileInput.value = '';
-             currentFile = null;
-             filePreview.classList.remove('show');
-             processButton.disabled = true;
-             regenerateButton.style.display = 'none'; // Hide regenerate when no file
-         }
-         
-         function formatFileSize(bytes) {
-             if (bytes < 1024) return bytes + ' bytes';
-             else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
-             else return (bytes / 1048576).toFixed(1) + ' MB';
-         }
-         
-         function getCurrentTime() {
-             const now = new Date();
-             return now.toLocaleTimeString();
-         }
-         
-         // Replace your entire processFile() function in index.html with this:
-         
-         function processFile(file) {
-         // Hide regenerate button and disable process button during processing
-         regenerateButton.style.display = 'none';
-         processButton.disabled = true;
-         
-         // Show processing section
-         processingSection.classList.add('show');
-         resultsSection.classList.remove('show');
-         
-         // Create FormData object
-         const formData = new FormData();
-         formData.append('file', file);
-         
-         console.log('📄 Starting file processing...');
-         
-         // Create abort controller with 10-minute timeout
-         const controller = new AbortController();
-         const timeoutId = setTimeout(() => {
-         console.warn('⏰ Request timeout after 10 minutes');
-         controller.abort();
-         }, 6000000); // 10 minutes = 600,000 milliseconds
-         
-         // Send the actual request to backend
-         fetch('/upload', {
-         method: 'POST',
-         body: formData,
-         credentials: "include",
-         signal: controller.signal
-         })
-         .then(response => {
-         clearTimeout(timeoutId); // Clear timeout on response
-         console.log('📡 Response received:', response.status);
-         
-         if (response.ok) {
-             return response.json();
-         } else if (response.status === 401) {
-             // User not authenticated
-             window.location.href = '/login';
-             return null;
-         } else {
-             return response.text().then(text => {
-                 console.error('❌ Server error:', text);
-                 throw new Error(text || 'Failed to process file');
-             });
-         }
-         })
-         .then(data => {
-         if (!data) return; // Already redirected to login
-         
-         console.log('✅ Processing completed successfully');
-         
-         if (data && data.status === 'success') {
-             // Decode the Excel file from base64
-             const excelData = atob(data.file);
-             const byteArray = new Uint8Array(excelData.length);
-             for (let i = 0; i < excelData.length; i++) {
-                 byteArray[i] = excelData.charCodeAt(i);
-             }
-             const excelBlob = new Blob(
-                 [byteArray],
-                 { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
-             );
-             
-             // Create download link
-             const url = window.URL.createObjectURL(excelBlob);
-             downloadExcel.href = url;
-             downloadExcel.download = data.filename || 'AI-Generated_SOW_Document.xlsx';
-             
-             // Update UI with dynamic data from backend
-             updateResultsUI(data.metadata);
-             
-             // Show regenerate button and re-enable process button after successful processing
-             regenerateButton.style.display = 'inline-flex';
-             processButton.disabled = false;
-             
-             // Show results section
-             processingSection.classList.remove('show');
-             resultsSection.classList.add('show');
-             
-             console.log('🎉 UI updated successfully');
-         } else {
-             console.error('❌ Processing failed:', data);
-             throw new Error(data.detail || data.message || 'Processing failed');
-         }
-         })
-         .catch(error => {
-         clearTimeout(timeoutId); // Clear timeout on error
-         
-         // Reset buttons on error
-         regenerateButton.style.display = 'none';
-         processButton.disabled = !currentFile;
-         
-         // Check if it's an abort error (timeout)
-         if (error.name === 'AbortError') {
-             console.error('⏰ Request timed out after 10 minutes');
-             alert('Processing timeout (10 minutes exceeded).\n\nYour file may still be processing on the server.\n\nPlease:\n1. Wait 2-3 minutes\n2. Refresh the page\n3. Try uploading again\n\nIf this persists, the file may be too large or complex.');
-             processingSection.classList.remove('show');
-             return;
-         }
-         
-         // Check for authentication error
-         if (error.message && error.message.includes('401')) {
-             window.location.href = '/login';
-             return;
-         }
-         
-         // Log and display other errors
-         console.error('❌ Error details:', error);
-         const errorMessage = error.message || 'Unknown error occurred';
-         alert('Error: ' + errorMessage + '\n\nCheck the browser console for more details.\n\nIf this persists, try:\n1. Refreshing the page\n2. Logging in again\n3. Using a smaller PDF file');
-         
-         processingSection.classList.remove('show');
-         });
-         }
-         
-         function startPollingForStatus() {
-             const interval = setInterval(() => {
-                 fetch('/status', { method: 'POST', credentials: "include" })
-                     .then(response => response.json())
-                     .then(data => {
-                         if (data.status === 'completed') {
-                             clearInterval(interval);
-                             console.log('✅ Processing completed successfully');
-                             // Update UI with results
-                             updateResultsUI(data.metadata);
-                             processingSection.classList.remove('show');
-                             resultsSection.classList.add('show');
-                         } else if (data.status === 'failed') {
-                             clearInterval(interval);
-                             console.error('❌ Processing failed:', data.message);
-                             alert('Error: ' + data.message);
-                             processingSection.classList.remove('show');
-                         }
-                     })
-                     .catch(err => {
-                         console.error('Error while polling for status:', err);
-                     });
-             }, 100); // Poll every 5 seconds
-         }
-         
-         function updateResultsUI(metadata) {
-             // Update summary values with dynamic data from backend
-             durationValue.textContent = calculateTotalDuration(metadata.durations);
-             
-             // Show only completed tasks count
-             completedTasksValue.textContent = metadata.completedTasks;
-             
-             // FIXED: Count phases that have at least 1 completed task
-             let phasesWithCompletedTasks = 0;
-             
-             if (metadata.phaseTaskCounts) {
-                 // Count phases that have completed_tasks > 0
-                 for (const phase in metadata.phaseTaskCounts) {
-                     if (metadata.phaseTaskCounts[phase].completed_tasks > 0) {
-                         phasesWithCompletedTasks++;
-                     }
-                 }
-             }
-             
-             totalPhasesValue.textContent = phasesWithCompletedTasks || '0';
-             
-             // Create results table using actual phase task counts
-             let tableHTML = `
-                 <table class="results-table">
-                     <thead>
-                         <tr>
-                             <th>Phase</th>
-                             <th>Duration</th>
-                             <th>Tasks Completed</th>
-                             <th>Status</th>
-                         </tr>
-                     </thead>
-                     <tbody>
-             `;
-             
-             let hasVisiblePhases = false;
-             
-             // Use actual phase task counts
-             if (metadata.phaseTaskCounts) {
-                 // Show phases that have task counts
-                 for (const phase in metadata.phaseTaskCounts) {
-                     const phaseData = metadata.phaseTaskCounts[phase];
-                     const phaseDuration = metadata.durations[phase.toUpperCase()] || '';
-                     
-                     // Only show phases with completed tasks > 0
-                     if (phaseData.completed_tasks > 0) {
-                         hasVisiblePhases = true;
-                         tableHTML += `
-                             <tr>
-                                 <td>${phase}</td>
-                                 <td>${phaseDuration}</td>
-                                 <td>${phaseData.completed_tasks}</td>
-                                 <td>${phaseData.completed_tasks === phaseData.total_tasks ? 'Complete' : 'In Progress'}</td>
-                             </tr>
-                         `;
-                     }
-                 }
-             }
-             
-             // If no phases have completed tasks, show a message
-             if (!hasVisiblePhases) {
-                 tableHTML += `
-                     <tr>
-                         <td colspan="4" style="text-align: center; color: var(--primary-500); padding: 2rem;">
-                             No tasks completed in any phase. Please review the document for task requirements.
-                         </td>
-                     </tr>
-                 `;
-             }
-             
-             // Then add rows for phases that have durations but no specific tasks (only if they have duration)
-             if (metadata.durations) {
-                 for (const phase in metadata.durations) {
-                     if (metadata.durations[phase] && metadata.durations[phase].toString().trim() !== '') {
-                         const phaseExists = metadata.phaseTaskCounts && 
-                             Object.keys(metadata.phaseTaskCounts).some(p => p.toUpperCase() === phase);
-                         
-                         if (!phaseExists) {
-                             tableHTML += `
-                                 <tr>
-                                     <td>${phase}</td>
-                                     <td>${metadata.durations[phase]}</td>
-                                     <td>--</td>
-                                     <td>Not Analyzed</td>
-                                 </tr>
-                             `;
-                         }
-                     }
-                 }
-             }
-             
-             tableHTML += `
-                     </tbody>
-                 </table>
-             `;
-             
-             resultsTableContainer.innerHTML = tableHTML;
-         }
-         function calculateTotalDuration(durations) {
-             if (!durations) return '--';
-             
-             let totalWeeks = 0;
-             for (const phase in durations) {
-                 if (durations[phase]) {
-                     const duration = durations[phase].toString();
-                     // Extract numeric value from duration string
-                     const match = duration.match(/(\d+)\s*(week|month)/i);
-                     if (match) {
-                         const value = parseInt(match[1]);
-                         const unit = match[2].toLowerCase();
-                         
-                         if (unit === 'month') {
-                             totalWeeks += value * 4; // Convert months to weeks
-                         } else if (unit === 'week') {
-                             totalWeeks += value;
-                         }
-                     }
-                 }
-             }
-             
-             // Convert back to appropriate format
-             if (totalWeeks >= 8) {
-                 const months = Math.round(totalWeeks / 4);
-                 return `${months} month${months !== 1 ? 's' : ''}`;
-             } else {
-                 return `${totalWeeks} week${totalWeeks !== 1 ? 's' : ''}`;
-             }
-         }
-         
-         function cancelProcessing() {
-             clearInterval(processingInterval);
-             processingSection.classList.remove('show');
-             // Reset buttons when canceling
-             regenerateButton.style.display = 'none';
-             processButton.disabled = !currentFile;
-         }
-         
-         // Help Modal functionality
-         const helpModal = document.getElementById('helpModal');
-         const helpModalClose = document.getElementById('helpModalClose');
-         
-         document.addEventListener('DOMContentLoaded', function() {
-             // Find the Help & Support nav item
-             const helpNavItem = [...document.querySelectorAll('.nav-item')]
-                 .find(item => item.textContent.includes('Help & Support'));
-         
-             if (helpNavItem) {
-                 helpNavItem.addEventListener('click', (e) => {
-                     e.preventDefault();
-                     // Close sidebar
-                     hamburger.classList.remove('active');
-                     sidebar.classList.remove('open');
-                     overlay.classList.remove('active');
-                     // Show modal
-                     helpModal.classList.add('show');
-                 });
-             }
-         });
-         
-         // Close button
-         helpModalClose.addEventListener('click', () => {
-             helpModal.classList.remove('show');
-         });
-         
-         // Click outside modal to close
-         helpModal.addEventListener('click', (e) => {
-             if (e.target === helpModal) {
-                 helpModal.classList.remove('show');
-             }
-         });
-         
-      </script>
-   </body>
+                    </div>
+                </header>
+
+                <!-- Upload Section -->
+                <section id="upload-section" class="bg-white p-6 rounded-lg shadow-md mb-8">
+                    <div class="flex items-center mb-4">
+                        <h2 class="text-xl font-semibold text-gray-800">Upload Statement of Work</h2>
+                        <span class="ml-2 text-gray-600">❓</span>
+                    </div>
+                    <div class="border-2 border-dashed border-gray-300 p-6 rounded-lg text-center">
+                        <span class="text-2xl">📄</span>
+                        <p class="text-gray-600 mt-2">Drop your SOW document here or choose from your device</p>
+                        <div class="mt-4 flex justify-center space-x-4">
+                            <label class="bg-blue-600 text-white px-4 py-2 rounded-md cursor-pointer hover:bg-blue-700">
+                                📁 Browse Files
+                                <input id="file-upload" type="file" accept=".pdf" class="hidden" onchange="document.getElementById('file-name').innerText = this.files[0]?.name || ''">
+                            </label>
+                            <button class="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300">🔗 Import from URL</button>
+                        </div>
+                        <div class="mt-4 flex items-center justify-center">
+                            <span id="file-name" class="text-gray-600">• Ready to process</span>
+                            <button class="ml-2 text-gray-600 hover:text-red-600" onclick="document.getElementById('file-upload').value='';document.getElementById('file-name').innerText='• Ready to process'">✕</button>
+                        </div>
+                    </div>
+                    <div class="mt-6">
+                        <button class="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700" onclick="uploadFile(event)">🚀 Analyze and Generate Project Plan</button>
+                        <p id="upload-status" class="mt-2 text-gray-600"></p>
+                        <div class="mt-4 flex justify-center space-x-4">
+                            <a id="download-sow" href="#" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 hidden">📄 Download SOW Report</a>
+                            <a href="#" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">📝 Submit Feedback</a>
+                        </div>
+                    </div>
+                    <div class="mt-6">
+                        <h3 class="text-lg font-semibold text-gray-800">Supported Document Formats</h3>
+                        <div class="flex space-x-4 mt-2">
+                            <div class="text-center">
+                                <span class="text-2xl">📄</span>
+                                <p class="text-sm text-gray-600">PDF Documents</p>
+                            </div>
+                            <div class="text-center">
+                                <span class="text-2xl">📝</span>
+                                <p class="text-sm text-gray-600">Word Documents</p>
+                            </div>
+                            <div class="text-center">
+                                <span class="text-2xl">📊</span>
+                                <p class="text-sm text-gray-600">Excel Sheets</p>
+                            </div>
+                            <div class="text-center">
+                                <span class="text-2xl">📋</span>
+                                <p class="text-sm text-gray-600">Text Files</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Admin Section -->
+                <section id="admin-section" class="bg-white p-6 rounded-lg shadow-md hidden">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-4">👨‍💼 Admin Dashboard</h2>
+                    <p class="text-gray-600 mb-4">As an admin, you can view and download the comprehensive token usage reports. Uploading PDFs is disabled for admin accounts.</p>
+                    <button class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 mb-4" onclick="refreshTokenPreview()">🔄 Refresh Preview</button>
+                    <div class="overflow-x-auto">
+                        <table class="w-full border-collapse">
+                            <thead>
+                                <tr class="bg-blue-600 text-white">
+                                    <th class="px-4 py-2">Email</th>
+                                    <th class="px-4 py-2">Username</th>
+                                    <th class="px-4 py-2">File Name</th>
+                                    <th class="px-4 py-2">Total Tokens</th>
+                                    <th class="px-4 py-2">User Login Time</th>
+                                    <th class="px-4 py-2">AI Response Time (minutes)</th>
+                                    <th class="px-4 py-2">User Logout Time</th>
+                                </tr>
+                            </thead>
+                            <tbody id="token-preview-body">
+                                <tr><td colspan="7" class="text-center py-4">No data available. Click refresh to load preview.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-4 flex justify-center space-x-4">
+                        <a id="download-token" href="#" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">📈 Download Token Report</a>
+                        <a href="#" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">📝 Submit Feedback</a>
+                    </div>
+                </section>
+            </main>
+        </div>
+    </section>
+</body>
 </html>
-
-
-
-
