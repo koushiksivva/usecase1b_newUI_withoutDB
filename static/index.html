@@ -2002,7 +2002,7 @@
          const timeoutId = setTimeout(() => {
          console.warn('⏰ Request timeout after 10 minutes');
          controller.abort();
-         }, 600000000000); // 10 minutes = 600,000 milliseconds
+         }, 6000000); // 10 minutes = 600,000 milliseconds
          
          // Send the actual request to backend
          fetch('/upload', {
@@ -2296,6 +2296,7 @@
       </script>
    </body>
 </html>
+
 
 
 
