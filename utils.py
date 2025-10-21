@@ -36,8 +36,8 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler()
-       
+        logging.StreamHandler(),
+        logging.FileHandler('app.log')
     ]
 )
 logger = logging.getLogger(__name__)
@@ -422,7 +422,7 @@ def similarity_search_cosmos(query_text, document_id, k=5):
                             "cosmosSearch": {
                                 "vector": query_embedding,
                                 "path": "embedding",
-                                "k": min(k,10)  # Limit early
+                                "k": min(k, 10)  # Limit early
                             }
                         }
                     },
