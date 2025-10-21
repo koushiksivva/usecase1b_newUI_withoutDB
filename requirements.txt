@@ -3,7 +3,7 @@ uvicorn
 gunicorn
 python-dotenv
 pymongo
-langchain==1.0.0
+langchain==1.0.1
 langchain-openai
 fuzzywuzzy
 pandas
@@ -14,5 +14,6 @@ backoff
 python-Levenshtein
 
 python-multipart
+
 
 
