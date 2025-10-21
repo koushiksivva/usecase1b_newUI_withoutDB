@@ -3,7 +3,7 @@ uvicorn
 gunicorn
 python-dotenv
 pymongo
-langchain
+langchain==0.0.340
 langchain-openai
 fuzzywuzzy
 pandas
@@ -12,4 +12,5 @@ tiktoken
 PyMuPDF
 backoff
 python-Levenshtein
+
 python-multipart
