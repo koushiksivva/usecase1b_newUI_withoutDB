@@ -125,16 +125,33 @@ def get_query_embedding(query: str):
 def cached_doc_embedding(text: str):
     return embedding_model.embed_documents([text])[0]
 
+# def check_tpm_limit():
+#     current_time = time.time()
+#     elapsed_minutes = (current_time - token_stats["start_time"]) / 60
+#     if elapsed_minutes > 0:
+#         current_tpm = (token_stats["llm_input_tokens"] + token_stats["llm_output_tokens"]) / elapsed_minutes
+#         if current_tpm > (TPM_LIMIT * TPM_THRESHOLD):
+#             sleep_time = 60 - (elapsed_minutes % 60)
+#             logger.info(f"Approaching TPM limit ({current_tpm:.0f}). Pausing for {sleep_time:.1f}s")
+#             time.sleep(sleep_time)
+#             token_stats["start_time"] = time.time()
+
 def check_tpm_limit():
     current_time = time.time()
-    elapsed_minutes = (current_time - token_stats["start_time"]) / 60
+    elapsed_seconds = current_time - token_stats["start_time"]
+    elapsed_minutes = elapsed_seconds / 60
     if elapsed_minutes > 0:
         current_tpm = (token_stats["llm_input_tokens"] + token_stats["llm_output_tokens"]) / elapsed_minutes
         if current_tpm > (TPM_LIMIT * TPM_THRESHOLD):
-            sleep_time = 60 - (elapsed_minutes % 60)
+            sleep_time = 60 - (elapsed_seconds % 60)  # Sleep until next minute
             logger.info(f"Approaching TPM limit ({current_tpm:.0f}). Pausing for {sleep_time:.1f}s")
             time.sleep(sleep_time)
+            # # Reset token stats for the next minute
+            # token_stats["llm_input_tokens"] = 0
+            # token_stats["llm_output_tokens"] = 0
             token_stats["start_time"] = time.time()
+
+
 
 def count_tokens(text: str, model: str = "gpt-4o"):
     if not text or not isinstance(text, str):
@@ -1077,5 +1094,6 @@ def create_token_report_excel(username=None):
     except Exception as e:
         logger.error(f"Error creating token report: {str(e)}", exc_info=True)
         return None
+
 
 
