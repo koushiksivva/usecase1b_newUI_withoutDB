@@ -2292,7 +2292,7 @@
                  }else if (data) {
                     // If backend says "processing", show a message instead of error
                     if (data.status === 'processing' && data.message) {
-                        //alert('Info: ' + data.message + '\n\nPlease wait until processing completes.');
+                        alert('Info: ' + data.message + '\n\nPlease wait until processing completes.');
                         // Optionally, keep the processing section visible and do not show error
                         // Start polling for status if not already started
                         startPollingForStatus();
@@ -2317,7 +2317,7 @@
                 // Log and display error
                 console.error('Error details:', error);
                 const errorMessage = error.message || 'Unknown error occurred';
-                //alert('Error: ' + errorMessage + '\n\nCheck the browser console for more details. If this persists, try logging in again.');
+                alert('Error: ' + errorMessage + '\n\nCheck the browser console for more details. If this persists, try logging in again.');
                 processingSection.classList.remove('show');
             
             });
@@ -2337,7 +2337,7 @@
                         } else if (data.status === 'failed') {
                             clearInterval(interval);
                             console.error('❌ Processing failed:', data.message);
-                            //alert('Error: ' + data.message);
+                            alert('Error: ' + data.message);
                             processingSection.classList.remove('show');
                         }
                     })
@@ -2522,4 +2522,5 @@
     </script>
 </body>
 </html>
+
 
