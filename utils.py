@@ -146,9 +146,9 @@ def check_tpm_limit():
             sleep_time = 60 - (elapsed_seconds % 60)  # Sleep until next minute
             logger.info(f"Approaching TPM limit ({current_tpm:.0f}). Pausing for {sleep_time:.1f}s")
             time.sleep(sleep_time)
-            # # Reset token stats for the next minute
-            # token_stats["llm_input_tokens"] = 0
-            # token_stats["llm_output_tokens"] = 0
+            # Reset token stats for the next minute
+            token_stats["llm_input_tokens"] = 0
+            token_stats["llm_output_tokens"] = 0
             token_stats["start_time"] = time.time()
 
 
@@ -1094,6 +1094,7 @@ def create_token_report_excel(username=None):
     except Exception as e:
         logger.error(f"Error creating token report: {str(e)}", exc_info=True)
         return None
+
 
 
 
