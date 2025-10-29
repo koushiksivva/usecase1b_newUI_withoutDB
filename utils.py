@@ -692,23 +692,41 @@ def process_batch_with_fallback(sub_batch, document_id, durations, normalized_pd
         return [{"Heading": str(h), "Task": str(t), "Present": "error", **durations} for h, t in sub_batch], 0
     
 def process_pdf_from_blob(blob_url: str):
-    # Download blob to temp file
-    blob_service_client = BlobServiceClient.from_connection_string(os.getenv("AZURE_STORAGE_CONNECTION_STRING"))
-    blob_client = blob_service_client.get_blob_client(container=os.getenv("AZURE_STORAGE_CONTAINER"), blob=os.path.basename(blob_url))
-    
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-        download_stream = blob_client.download_blob()
-        tmp_file.write(download_stream.readall())
-        tmp_file_path = tmp_file.name
-    
+    if not blob_url or not isinstance(blob_url, str):
+        logger.error(f"Invalid blob_url: {blob_url}")
+        return None
+
     try:
-        # Process with existing function
-        with open(tmp_file_path, "rb") as f:
-            file_like = io.BytesIO(f.read())
-            result = process_pdf_safely(file_like)
-        return result
-    finally:
-        os.unlink(tmp_file_path)  # Clean up temp file
+        blob_service_client = BlobServiceClient.from_connection_string(
+            os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+        )
+        blob_name = os.path.basename(blob_url)
+        if not blob_name:
+            logger.error(f"Could not extract blob name from URL: {blob_url}")
+            return None
+
+        blob_client = blob_service_client.get_blob_client(
+            container=os.getenv("AZURE_STORAGE_CONTAINER"),
+            blob=blob_name
+        )
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+            download_stream = blob_client.download_blob()
+            tmp_file.write(download_stream.readall())
+            tmp_file_path = tmp_file.name
+
+        try:
+            with open(tmp_file_path, "rb") as f:
+                file_like = io.BytesIO(f.read())
+                result = process_pdf_safely(file_like)
+            return result
+        finally:
+            if os.path.exists(tmp_file_path):
+                os.unlink(tmp_file_path)
+
+    except Exception as e:
+        logger.error(f"Error in process_pdf_from_blob: {e}", exc_info=True)
+        return None
 
 def process_pdf_safely(uploaded_file):
     try:
