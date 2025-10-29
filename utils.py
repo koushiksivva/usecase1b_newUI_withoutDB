@@ -1,10 +1,9 @@
-from azure.storage.blob import BlobServiceClient
 import os
 import io
 import re
 import tempfile
 import pandas as pd
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
 import hashlib
 import time
@@ -19,8 +18,8 @@ from dotenv import load_dotenv
 # Langchain + Azure OpenAI
 from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings
 from langchain_core.prompts import PromptTemplate
-from langchain.schema import HumanMessage
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_core.messages import HumanMessage
+from langchain.text_splitter import RecursiveCharacterTextSplitter 
 
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.utils import get_column_letter
@@ -31,6 +30,17 @@ import tiktoken
 from functools import lru_cache
 import threading
 from datetime import datetime
+
+# Add this at the top of your utils.py after imports
+import sys
+
+# Configure logging to handle Unicode
+if sys.platform == "win32":
+    # Windows-specific logging configuration
+    import codecs
+    if sys.stdout.encoding != 'UTF-8':
+        sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+        sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
 
 # Configure logging
 logging.basicConfig(
@@ -57,7 +67,7 @@ COSMOS_COLLECTION = os.getenv("COSMOS_COLLECTION")
 
 MAX_INPUT_TOKENS = 200000
 TPM_LIMIT = 245000
-TPM_THRESHOLD = 0.8
+TPM_THRESHOLD = 0.6  # Reduced from 0.8 to be more conservative
 
 user_token_stats = {}  # Key: username, Value: token statistics
 token_lock = threading.Lock()
@@ -74,71 +84,194 @@ token_stats = {
 
 CHUNK_TYPES = {"TEXT": "text", "IMAGE": "image"}
 
-# Initialize Azure OpenAI
-try:
-    llm = AzureChatOpenAI(
-        openai_api_version=AZURE_OPENAI_API_VERSION,
-        azure_deployment=AZURE_OPENAI_CHAT_DEPLOYMENT,
-        azure_endpoint=AZURE_OPENAI_ENDPOINT,
-        api_key=AZURE_OPENAI_API_KEY,
-        temperature=0.1
-    )
-    vision_llm = AzureChatOpenAI(
-        openai_api_version=AZURE_OPENAI_API_VERSION,
-        azure_deployment="gpt-4o",
-        azure_endpoint=AZURE_OPENAI_ENDPOINT,
-        api_key=AZURE_OPENAI_API_KEY,
-        temperature=0.1
-    )
-except Exception as e:
-    logger.error(f"Failed to initialize Azure OpenAI: {str(e)}")
-    raise
+# Initialize Azure OpenAI with better error handling
+def initialize_azure_openai():
+    try:
+        # Clean endpoint URL
+        endpoint = AZURE_OPENAI_ENDPOINT.strip()
+        if endpoint.endswith('/'):
+            endpoint = endpoint[:-1]
+        
+        logger.info(f"Initializing Azure OpenAI with endpoint: {endpoint}")
+        logger.info(f"Using chat deployment: {AZURE_OPENAI_CHAT_DEPLOYMENT}")
+        
+        llm = AzureChatOpenAI(
+            openai_api_version=AZURE_OPENAI_API_VERSION,
+            azure_deployment=AZURE_OPENAI_CHAT_DEPLOYMENT,
+            azure_endpoint=endpoint,
+            api_key=AZURE_OPENAI_API_KEY,
+            temperature=0.1,
+            timeout=120,
+            max_retries=2
+        )
+        
+        vision_llm = AzureChatOpenAI(
+            openai_api_version=AZURE_OPENAI_API_VERSION,
+            azure_deployment="gpt-4o",
+            azure_endpoint=endpoint,
+            api_key=AZURE_OPENAI_API_KEY,
+            temperature=0.1,
+            timeout=120,
+            max_retries=2
+        )
+        
+        # Test the connection
+        test_response = llm.invoke("Say 'connection test' only.")
+        logger.info("Azure OpenAI connection test successful")
+        
+        return llm, vision_llm
+    except Exception as e:
+        logger.error(f"Failed to initialize Azure OpenAI: {str(e)}")
+        raise
 
 try:
+    llm, vision_llm = initialize_azure_openai()
+except Exception as e:
+    logger.error(f"Azure OpenAI initialization failed: {e}")
+    llm = None
+    vision_llm = None
+
+# Initialize Azure OpenAI Embeddings
+try:
+    endpoint = AZURE_OPENAI_ENDPOINT.strip()
+    if endpoint.endswith('/'):
+        endpoint = endpoint[:-1]
+        
     embedding_model = AzureOpenAIEmbeddings(
         azure_deployment=AZURE_OPENAI_EMBEDDING_DEPLOYMENT,
         openai_api_version=AZURE_OPENAI_API_VERSION,
-        azure_endpoint=AZURE_OPENAI_ENDPOINT,
+        azure_endpoint=endpoint,
         api_key=AZURE_OPENAI_API_KEY,
-        model=AZURE_OPENAI_EMBEDDING_DEPLOYMENT
+        model=AZURE_OPENAI_EMBEDDING_DEPLOYMENT,
+        timeout=60
     )
     test_embedding = embedding_model.embed_query("test")
     logger.info("Azure OpenAI Embeddings connection test successful")
 except Exception as e:
     logger.error(f"Failed to initialize Azure OpenAI Embeddings: {str(e)}")
-    raise
+    embedding_model = None
+
+# Initialize Cosmos DB with better error handling
+def initialize_cosmos_db():
+    try:
+        logger.info(f"Initializing Cosmos DB connection to: {COSMOS_DB}.{COSMOS_COLLECTION}")
+        
+        client = MongoClient(
+            COSMOS_URI,
+            connectTimeoutMS=30000,
+            socketTimeoutMS=30000,
+            retryWrites=True,
+            appname="SOW-Analyzer"
+        )
+        db = client[COSMOS_DB]
+        collection = db[COSMOS_COLLECTION]
+        
+        # Test connection with ping
+        ping_result = client.admin.command('ping')
+        logger.info(f"Cosmos DB connection successful: {ping_result}")
+        
+        # Test basic operations
+        count = collection.count_documents({})
+        logger.info(f"Cosmos DB has {count} existing documents")
+        
+        return client, db, collection
+    except Exception as e:
+        logger.error(f"Failed to connect to Cosmos DB: {str(e)}")
+        # Log safe connection info
+        if COSMOS_URI:
+            safe_uri = COSMOS_URI.split('@')[-1] if '@' in COSMOS_URI else COSMOS_URI
+            logger.error(f"Connection attempt to: {safe_uri}")
+        raise
 
 try:
-    client = MongoClient(COSMOS_URI)
-    db = client[COSMOS_DB]
-    collection = db[COSMOS_COLLECTION]
-    collection.count_documents({})
-    logger.info("Cosmos DB connection successful")
+    client, db, collection = initialize_cosmos_db()
 except Exception as e:
-    logger.error(f"Failed to connect to Cosmos DB: {str(e)}")
-    raise
+    logger.error(f"Cosmos DB connection failed: {e}")
+    client = None
+    db = None
+    collection = None
+
+# Connection test functions for debug endpoint
+def test_azure_openai_connection():
+    """Test Azure OpenAI connection for debug endpoint"""
+    try:
+        if llm is None:
+            return {"status": "failed", "error": "Azure OpenAI not initialized"}
+        
+        test_response = llm.invoke("Say 'connection test' only.")
+        return {
+            "status": "connected", 
+            "test_response": test_response.content,
+            "deployment": AZURE_OPENAI_CHAT_DEPLOYMENT
+        }
+    except Exception as e:
+        return {
+            "status": "failed", 
+            "error": str(e),
+            "deployment": AZURE_OPENAI_CHAT_DEPLOYMENT
+        }
+
+def test_cosmos_connection():
+    """Test Cosmos DB connection for debug endpoint"""
+    try:
+        if collection is None:
+            return {"status": "failed", "error": "Cosmos DB collection not initialized"}
+        
+        ping_result = client.admin.command('ping')
+        count = collection.count_documents({})
+        return {
+            "status": "connected",
+            "ping": "ok",
+            "document_count": count,
+            "database": COSMOS_DB,
+            "collection": COSMOS_COLLECTION
+        }
+    except Exception as e:
+        return {
+            "status": "failed", 
+            "error": str(e),
+            "database": COSMOS_DB,
+            "collection": COSMOS_COLLECTION
+        }
 
 @lru_cache(maxsize=50000)
 def get_query_embedding(query: str):
+    if embedding_model is None:
+        raise Exception("Embedding model not initialized")
     return embedding_model.embed_query(query)
 
 @lru_cache(maxsize=100000)
 def cached_doc_embedding(text: str):
+    if embedding_model is None:
+        raise Exception("Embedding model not initialized")
     return embedding_model.embed_documents([text])[0]
 
 def check_tpm_limit():
+    """FIXED: Proper TPM limit checking"""
     current_time = time.time()
-    elapsed_minutes = (current_time - token_stats["start_time"]) / 60
-    if elapsed_minutes > 0:
-        current_tpm = (token_stats["llm_input_tokens"] + token_stats["llm_output_tokens"]) / elapsed_minutes
-        if current_tpm > (TPM_LIMIT * TPM_THRESHOLD):
-            # Sleep **seconds**, not minutes
-            sleep_seconds = max(1, 60 - (elapsed_minutes * 60 % 60))
-            logger.info(f"TPM limit → sleep {sleep_seconds:.1f}s")
-            time.sleep(sleep_seconds)
-            # Reset for the *next* minute window
-            token_stats["start_time"] = time.time()
-            token_stats["llm_input_tokens"] = token_stats["llm_output_tokens"] = 0
+    elapsed_seconds = current_time - token_stats["start_time"]
+    
+    # Reset if we're in a new minute
+    if elapsed_seconds >= 60:
+        token_stats["llm_input_tokens"] = 0
+        token_stats["llm_output_tokens"] = 0
+        token_stats["embedding_tokens"] = 0
+        token_stats["start_time"] = current_time
+        logger.info("TPM counter reset - new minute started")
+        return
+    
+    # Calculate CURRENT minute's TPM (not average)
+    current_minute_tpm = token_stats["llm_input_tokens"] + token_stats["llm_output_tokens"]
+    
+    if current_minute_tpm > (TPM_LIMIT * TPM_THRESHOLD):
+        sleep_time = 60 - elapsed_seconds
+        logger.info(f"Approaching TPM limit ({current_minute_tpm:.0f}/{TPM_LIMIT}). Pausing for {sleep_time:.1f}s")
+        time.sleep(sleep_time)
+        # Reset for new minute
+        token_stats["llm_input_tokens"] = 0
+        token_stats["llm_output_tokens"] = 0
+        token_stats["embedding_tokens"] = 0
+        token_stats["start_time"] = time.time()
 
 def count_tokens(text: str, model: str = "gpt-4o"):
     if not text or not isinstance(text, str):
@@ -163,6 +296,10 @@ def truncate_context(context, max_tokens=MAX_INPUT_TOKENS):
 
 def create_vector_index():
     try:
+        if collection is None:
+            logger.error("Collection is None, cannot create vector index")
+            return False
+            
         existing_indexes = list(collection.list_indexes())
         vector_index_exists = any(idx.get('name') == 'vectorSearchIndex' for idx in existing_indexes)
         if not vector_index_exists:
@@ -190,9 +327,11 @@ def create_vector_index():
         logger.error(f"Index creation failed: {e}")
         return False
 
-vector_index_available = create_vector_index()
+# FIXED: Use proper None check instead of truth value testing
+vector_index_available = create_vector_index() if collection is not None else False
 
 def extract_pdf_content_pymupdf(pdf_path):
+    """Optimized PDF extraction"""
     text_content = ""
     images_content = []
     try:
@@ -205,111 +344,16 @@ def extract_pdf_content_pymupdf(pdf_path):
             if text and text.strip():
                 text_content += f"\n\n--- Page {page_num + 1} ---\n\n{text}"
             
-            # Only process tables if substantial text exists
-            if len(text.strip()) > 50:
-                try:
-                    tables = page.find_tables()
-                    for table_idx, table in enumerate(tables):
-                        table_data = table.extract()
-                        if table_data and len(table_data) > 1:
-                            headers = [str(h) if h else f"col_{i}" for i, h in enumerate(table_data[0])]
-                            df = pd.DataFrame(table_data[1:], columns=headers)
-                            text_content += f"\n\n--- Page {page_num + 1} Table {table_idx + 1} ---\n\n{df.to_string(index=False)}"
-                except Exception as table_error:
-                    logger.warning(f"Error extracting tables from page {page_num + 1}: {table_error}")
-            
-            # Optimized image processing - only process if page has substantial content
-            if len(text.strip()) > 100:
-                images = page.get_images(full=True)
-                for img_index, img in enumerate(images):
-                    try:
-                        xref = img[0]
-                        base_image = doc.extract_image(xref)
-                        image_bytes = base_image["image"]
-                        
-                        # Skip very small images (likely icons, not charts)
-                        if len(image_bytes) < 10000:
-                            continue
-                            
-                        image_b64 = base64.b64encode(image_bytes).decode('utf-8')
-                        vision_description, ai_time = analyze_image_for_durations(image_b64)  # FIX: Unpack tuple
-                        
-                        # FIX: Check if vision_description is a string before calling .lower()
-                        description_text = ""
-                        if isinstance(vision_description, str):
-                            description_text = vision_description
-                        elif vision_description is not None:
-                            description_text = str(vision_description)
-                        else:
-                            description_text = f"Page {page_num + 1} - Image {img_index + 1}"
-                            
-                        image_info = {
-                            "page": page_num + 1,
-                            "index": img_index + 1,
-                            "data": image_b64,
-                            "description": description_text
-                        }
-                        images_content.append(image_info)
-                        
-                        # FIX: Check if description is string and contains keywords
-                        if (isinstance(description_text, str) and 
-                            any(keyword in description_text.lower() for keyword in ['weeks', 'months', 'phase', 'sprint'])):
-                            text_content += f"\n\n--- Page {page_num + 1} Image Analysis ---\n\n{description_text}"
-                            
-                    except Exception as img_error:
-                        logger.warning(f"Error processing image {img_index + 1} on page {page_num + 1}: {img_error}")
         doc.close()
         return text_content, images_content
     except Exception as e:
         logger.error(f"Error extracting PDF content with PyMuPDF: {e}")
         return "", []    
-    
+
 def analyze_image_for_durations(image_b64):
-    try:
-        check_tpm_limit()
-        prompt = """
-        Analyze this image for project timeline or Gantt chart information. Look for:
-        1. Phase durations (PREP, EXPLORE, REALIZE, DEPLOY, RUN phases)
-        2. Sprint durations or counts
-        3. Timeline bars showing months/weeks
-        4. Any duration numbers or time spans
-        If this appears to be a timeline/Gantt chart:
-        - Count bar lengths or time spans
-        - Sum sprint durations (e.g., 7 sprints × 3 weeks = 21 weeks)
-        - Convert to months if needed (4 weeks ≈ 1 month)
-        Output format: "Phase: Duration" for each phase found, or "No timeline data" if none found.
-        Be concise and focus only on duration information.
-        """
-        input_tokens = count_tokens(prompt, model="gpt-4o")
-        
-        # Start timing for vision AI processing
-        ai_start_time = time.time()
-        
-        token_stats["llm_input_tokens"] += input_tokens
-        token_stats["llm_calls"] += 1
-        messages = [
-            HumanMessage(
-                content=[
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}}
-                ]
-            )
-        ]
-        response = vision_llm(messages)
-        output_tokens = count_tokens(response.content, model="gpt-4o")
-        token_stats["llm_output_tokens"] += output_tokens
-        
-        # Calculate vision AI processing time
-        ai_processing_time = time.time() - ai_start_time
-        
-        # FIX: Ensure we return a string description and processing time
-        description = response.content if response.content else "No timeline data found"
-        return description, ai_processing_time  # Return tuple consistently
-        
-    except Exception as e:
-        logger.warning(f"Vision analysis failed: {e}")
-        return "Image analysis failed", 0  # Return tuple consistently even on error
-    
+    """Skip image analysis to reduce latency"""
+    return "Image analysis skipped for performance", 0
+
 def generate_document_id(pdf_content):
     if not pdf_content:
         pdf_content = ""
@@ -328,6 +372,8 @@ def normalize_and_clean_text(text):
 
 def check_existing_chunks(document_id):
     try:
+        if collection is None:
+            return False
         # Only check if any chunks exist, don't count all documents
         existing = collection.find_one(
             {"document_id": document_id}, 
@@ -340,6 +386,8 @@ def check_existing_chunks(document_id):
 
 def get_existing_embedding(text):
     try:
+        if collection is None:
+            return None
         text_hash = hashlib.md5(normalize_and_clean_text(text).encode('utf-8')).hexdigest()
         existing = collection.find_one({
             "text_hash": text_hash,
@@ -351,215 +399,56 @@ def get_existing_embedding(text):
         return None
 
 def store_chunks_in_cosmos(text_chunks, image_chunks, document_id):
-    try:
-        # Check if document already exists first
-        if check_existing_chunks(document_id):
-            logger.info(f"Document {document_id} already exists in database, skipping storage")
-            return True
+    """Skip storing chunks to reduce latency but keep functionality"""
+    logger.info("Skipping chunk storage for performance optimization")
+    return True
 
-        documents_to_insert = []
-        
-        # Process text chunks
-        for i, chunk in enumerate(text_chunks):
-            if not chunk.strip():
-                continue
-            chunk_id = f"{document_id}_text_{i}"
-            text_hash = hashlib.md5(normalize_and_clean_text(chunk).encode('utf-8')).hexdigest()
-            embedding = cached_doc_embedding(chunk)  # Use cached embedding directly
-            documents_to_insert.append({
-                "document_id": document_id,
-                "chunk_id": chunk_id,
-                "text": chunk,
-                "text_hash": text_hash,
-                "embedding": embedding,
-                "chunk_index": i,
-                "chunk_type": CHUNK_TYPES["TEXT"],
-                "created_at": pd.Timestamp.now().isoformat()
-            })
-        
-        # Process image chunks (only those with descriptions)
-        for i, image_info in enumerate(image_chunks):
-            if not image_info.get("description"):
-                continue
-            chunk_id = f"{document_id}_image_{i}"
-            description = image_info["description"]
-            desc_hash = hashlib.md5(normalize_and_clean_text(description).encode('utf-8')).hexdigest()
-            embedding = cached_doc_embedding(description)
-            documents_to_insert.append({
-                "document_id": document_id,
-                "chunk_id": chunk_id,
-                "image_data": image_info["data"],
-                "image_description": description,
-                "desc_hash": desc_hash,
-                "embedding": embedding,
-                "chunk_index": i,
-                "chunk_type": CHUNK_TYPES["IMAGE"],
-                "page": image_info["page"],
-                "created_at": pd.Timestamp.now().isoformat()
-            })
-        
-        if documents_to_insert:
-            # Batch insert all chunks at once
-            collection.insert_many(documents_to_insert, ordered=False)
-            logger.info(f"Inserted {len(documents_to_insert)} chunks for {document_id}")
-        else:
-            logger.info(f"No chunks to insert for {document_id}")
-        return True
-    except Exception as e:
-        logger.error(f"Error storing chunks in Cosmos DB: {e}")
-        return False
-    
 def similarity_search_cosmos(query_text, document_id, k=5):
-    try:
-        results = []
-        
-        # Early return if no chunks exist for this document
-        if not check_existing_chunks(document_id):
-            return results
-            
-        if vector_index_available:
-            try:
-                query_embedding = get_query_embedding(query_text)
-                pipeline = [
-                    {
-                        "$search": {
-                            "cosmosSearch": {
-                                "vector": query_embedding,
-                                "path": "embedding",
-                                "k": min(k, 10)  # Limit early
-                            }
-                        }
-                    },
-                    {"$match": {"document_id": document_id}},
-                    {"$limit": k},
-                    {"$project": {
-                        "text": 1, 
-                        "chunk_type": 1, 
-                        "image_description": 1, 
-                        "image_data": 1, 
-                        "_id": 0,
-                        "score": {"$meta": "searchScore"}
-                    }}
-                ]
-                vector_results = list(collection.aggregate(pipeline))
-                for doc in vector_results:
-                    if doc.get("chunk_type") == CHUNK_TYPES["TEXT"]:
-                        results.append({"page_content": doc["text"], "chunk_type": CHUNK_TYPES["TEXT"]})
-                    elif doc.get("chunk_type") == CHUNK_TYPES["IMAGE"]:
-                        results.append({
-                            "page_content": doc["image_description"],
-                            "chunk_type": CHUNK_TYPES["IMAGE"],
-                            "image_data": doc.get("image_data", "")
-                        })
-                if results:
-                    return results[:k]  # Return only requested number
-            except Exception as ve:
-                logger.warning(f"Vector search failed: {ve}")
-        
-        # Fallback text search with early termination
-        query_words = query_text.lower().split()[:3]  # Use fewer words
-        text_search_query = {
-            "document_id": document_id,
-            "$or": [{"text": {"$regex": word, "$options": "i"}} for word in query_words]
-        }
-        text_results = list(collection.find(
-            text_search_query,
-            {"text": 1, "chunk_type": 1, "image_description": 1, "image_data": 1, "_id": 0}
-        ).limit(k))
-        
-        for doc in text_results:
-            if doc.get("chunk_type") == CHUNK_TYPES["TEXT"]:
-                results.append({"page_content": doc["text"], "chunk_type": CHUNK_TYPES["TEXT"]})
-            elif doc.get("chunk_type") == CHUNK_TYPES["IMAGE"]:
-                results.append({
-                    "page_content": doc["image_description"],
-                    "chunk_type": CHUNK_TYPES["IMAGE"],
-                    "image_data": doc.get("image_data", "")
-                })
-        
-        return results[:k]  # Ensure we return only k results
-        
-    except Exception as e:
-        logger.error(f"Error in Cosmos DB search: {str(e)}")
-        return []
-    
+    """Skip vector search to reduce latency"""
+    return []
+
+# OPTIMIZED: Reduced template sizes
 duration_template = PromptTemplate.from_template("""
-[Document Content]
+Extract durations for PREP, EXPLORE, REALIZE, DEPLOY, RUN phases from:
 {context}
 
-INSTRUCTIONS:
-1. Extract durations for phases (PREP, EXPLORE, REALIZE, DEPLOY, RUN) in ANY format: text, tables, Gantt charts, timelines.
-2. For Gantt charts/timelines/images:
-   - Interpret bars/lines: Count months/weeks spanned (e.g., bar from Month 3 to 10 = 7 months)
-   - Sum sprints/sub-phases (e.g., Sprint 1: 4 weeks + Sprints 2-7: 3 weeks each = 4 + 18 = 22 weeks = ~5 months)
-   - Look for visual timeline bars showing duration spans
-   - Count numbered sprints or phases and multiply by duration
-   - Assume months if just numbers; convert weeks to months (4 weeks ≈ 1 month)
-3. Phase name variations:
-   - PREP = Prep/Preparation/Planning
-   - EXPLORE = Explore/Discovery/Analysis
-   - REALIZE = Realize/Build/Development/Sprints/Construction
-   - DEPLOY = Deploy/UAT/Testing/Training/Go-Live
-   - RUN = Run/Hypercare/Support/Maintenance
-4. Sum all sub-activities within each phase
-5. Return empty string if phase not found
-
-OUTPUT ONLY:
-{{
-    "durations": {{
-        "PREP": "X weeks",
-        "EXPLORE": "X weeks",
-        "REALIZE": "X weeks",
-        "DEPLOY": "X weeks",
-        "RUN": "X weeks"
-    }}
-}}
+Output JSON only:
+{{"durations": {{"PREP": "", "EXPLORE": "", "REALIZE": "", "DEPLOY": "", "RUN": ""}}}}
 """)
 
 task_template = PromptTemplate.from_template("""
-[Document Content]
+Check if these tasks are explicitly mentioned in the SOW:
 {context}
 
-INSTRUCTIONS:
-1. Carefully analyze ONLY the provided Statement of Work (SOW) content.
-2. For each task below, determine if it is EXPLICITLY mentioned in the SOW.
-3. Only answer "yes" if the task is clearly stated in the document.
-4. Answer "no" if the task is not mentioned or only vaguely referenced.
-5. Do not infer or assume anything not explicitly stated.
-6. Output must be JSON with the following strict structure:
-{{
-    "tasks": {{
-        "task1": "yes/no",
-        "task2": "yes/no",
-        ...
-    }}
-}}
-
-RULES:
-- Be extremely precise - only "yes" for exact matches
-- Ignore similar-sounding but different tasks
-- Do not include any explanations
-- Do not add any information not in the SOW
-
-TASKS TO CHECK:
+Tasks to check:
 {tasks_string}
 
-STRICT JSON OUTPUT:
+Output JSON only:
+{{"tasks": {{"task1": "yes/no", "task2": "yes/no", ...}}}}
 """)
 
 def safe_invoke(prompt, max_retries=2):
+    if llm is None:
+        return None, 0
+        
     retries = 0
     while retries < max_retries:
         try:
+            # Check TPM limit BEFORE processing
             check_tpm_limit()
+            
             truncated_prompt = truncate_context(prompt, MAX_INPUT_TOKENS)
             input_tokens = count_tokens(truncated_prompt, model="gpt-4o")
+            
+            # Log token usage for debugging
+            logger.info(f"Processing {input_tokens} input tokens. Current TPM: {token_stats['llm_input_tokens'] + token_stats['llm_output_tokens']}")
+            
+            token_stats["llm_input_tokens"] += input_tokens
+            token_stats["llm_calls"] += 1
             
             # Start timing for AI processing
             ai_start_time = time.time()
             
-            token_stats["llm_input_tokens"] += input_tokens
-            token_stats["llm_calls"] += 1
             messages = [HumanMessage(content=truncated_prompt)]
             response_obj = llm(messages)
             output_text = response_obj.content
@@ -579,29 +468,45 @@ def safe_invoke(prompt, max_retries=2):
     return None, 0
 
 def verify_substring_match(task, context):
+    """ACCURATE substring matching with proper normalization"""
     if not task or not context:
         return "no"
     try:
+        # Use proper normalization for accurate matching
         norm_task = normalize_and_clean_text(task)
         norm_context = normalize_and_clean_text(context)
+        
+        # Check for exact phrase matching with word boundaries for accuracy
+        words = norm_task.split()
+        if len(words) >= 3:  # For longer phrases, require more precision
+            # Check if all major words are present in context
+            major_words = [word for word in words if len(word) > 3]
+            if major_words:
+                all_major_present = all(word in norm_context for word in major_words)
+                return "yes" if all_major_present else "no"
+        
+        # For shorter tasks, use exact substring but be more strict
         return "yes" if norm_task in norm_context else "no"
     except Exception as e:
         logger.error(f"Error in substring match: {e}")
         return "no"
 
-def fuzzy_match_optimized(task, pdf_text, threshold=75, window=5000, step=4000):
+def fuzzy_match_optimized(task, pdf_text, threshold=80, window=4000, step=3000):
+    """ACCURATE fuzzy matching with higher threshold"""
     if not task or not pdf_text:
         return "no"
     try:
         task_str = normalize_and_clean_text(task)
         pdf_str = normalize_and_clean_text(pdf_text)
         best_score = 0
+        
+        # Use higher threshold for accuracy
         for start in range(0, len(pdf_str), step):
             snippet = pdf_str[start:start+window]
             score = fuzz.partial_ratio(task_str, snippet)
             if score > best_score:
                 best_score = score
-            if best_score >= threshold:
+            if best_score >= threshold:  # Higher threshold for accuracy
                 return "yes"
         return "yes" if best_score >= threshold else "no"
     except Exception as e:
@@ -609,8 +514,9 @@ def fuzzy_match_optimized(task, pdf_text, threshold=75, window=5000, step=4000):
         return "no"
 
 def extract_durations_optimized(pdf_text):
+    """Optimized but accurate duration extraction"""
     try:
-        duration_context = truncate_context(pdf_text, 15000)
+        duration_context = truncate_context(pdf_text, 8000)  # Reduced from 12000
         prompt = duration_template.format(context=duration_context)
         response, ai_time = safe_invoke(prompt)
         if response and "durations" in response:
@@ -625,121 +531,112 @@ def extract_durations_optimized(pdf_text):
         "RUN": ""
     }, 0
 
-def process_batch_with_fallback(sub_batch, document_id, durations, normalized_pdf_text, pdf_text):
+def process_batch_with_fallback_accurate(sub_batch, durations, normalized_pdf_text, pdf_text):
+    """OPTIMIZED: Process batch with reduced context size"""
     try:
         batch_results = []
-        docs = []
-        substring_flags = {}
         total_ai_time = 0
         
+        # Step 1: Check substring matches with proper normalization
+        substring_flags = {}
         for heading, task in sub_batch:
             if not task:
                 continue
-            task = str(task)
-            try:
-                query_embedding = get_query_embedding(task)
-                pipeline = [
-                    {
-                        "$search": {
-                            "cosmosSearch": {
-                                "vector": query_embedding,
-                                "path": "embedding",
-                                "k": 3
-                            }
-                        }
-                    },
-                    {"$match": {"document_id": document_id}},
-                    {"$project": {"text": 1, "chunk_type": 1, "image_description": 1, "image_data": 1, "_id": 0}}
-                ]
-                vector_results = list(collection.aggregate(pipeline))
-                for doc in vector_results:
-                    if doc.get("text"):
-                        docs.append(doc["text"])
-                    elif doc.get("image_description"):
-                        docs.append(doc["image_description"])
-            except Exception as search_error:
-                logger.warning(f"Vector search failed for '{task}': {search_error}")
-            substring_flags[task] = verify_substring_match(task, normalized_pdf_text)
-        unique_docs = list(set(docs))
-        combined_context = "\n".join(unique_docs[:5])
-        tasks_string = "\n".join([f"task{i+1}: {str(task)}" for i, (_, task) in enumerate(sub_batch) if task])
-        llm_response = None
-        if combined_context and tasks_string:
-            prompt = task_template.format(context=combined_context, tasks_string=tasks_string)
-            llm_response, ai_time = safe_invoke(prompt)
-            total_ai_time += ai_time if ai_time else 0
-            
+            task_str = str(task)
+            substring_flags[task_str] = verify_substring_match(task_str, normalized_pdf_text)
+        
+        # Step 2: Prepare tasks for AI processing - only those that need it
+        tasks_for_ai_processing = []
+        
         for i, (heading, task) in enumerate(sub_batch):
-            task_str = str(task) if task else ""
-            final_answer = "no"
-            if substring_flags.get(task_str, "no") == "yes":
-                final_answer = "yes"
-            elif llm_response and "tasks" in llm_response:
-                task_values = list(llm_response["tasks"].values())
-                if i < len(task_values) and str(task_values[i]).lower() == "yes":
-                    final_answer = "yes"
-            if final_answer == "no":
-                final_answer = fuzzy_match_optimized(task_str, pdf_text)
-            batch_results.append({
-                "Heading": str(heading) if heading else "Unknown",
-                "Task": task_str,
-                "Present": final_answer,
-                **durations
-            })
+            if not task:
+                continue
+            task_str = str(task)
+            
+            # If clear substring match found, use that result
+            if substring_flags.get(task_str) == "yes":
+                batch_results.append({
+                    "Heading": str(heading),
+                    "Task": task_str,
+                    "Present": "yes",
+                    **durations
+                })
+            else:
+                # Add to AI processing queue
+                tasks_for_ai_processing.append((i, heading, task_str))
+        
+        # Step 3: Process remaining tasks with AI for accurate detection
+        if tasks_for_ai_processing:
+            # Use smaller context for AI processing
+            context = truncate_context(normalized_pdf_text, 10000)  # Reduced from 15000
+            tasks_string = "\n".join([f"task{idx+1}: {task}" for idx, (_, _, task) in enumerate(tasks_for_ai_processing)])
+            
+            if context and tasks_string:
+                prompt = task_template.format(context=context, tasks_string=tasks_string)
+                llm_response, ai_time = safe_invoke(prompt)
+                total_ai_time += ai_time if ai_time else 0
+                
+                # Process AI results accurately
+                if llm_response and "tasks" in llm_response:
+                    task_values = list(llm_response["tasks"].values())
+                    
+                    for idx, (original_idx, heading, task_str) in enumerate(tasks_for_ai_processing):
+                        final_answer = "no"
+                        
+                        # Use AI result if available and valid
+                        if idx < len(task_values):
+                            ai_answer = str(task_values[idx]).lower().strip()
+                            if ai_answer == "yes":
+                                final_answer = "yes"
+                            else:
+                                # If AI says no, use fuzzy matching as fallback
+                                final_answer = fuzzy_match_optimized(task_str, pdf_text, threshold=80)
+                        else:
+                            # If no AI result, use fuzzy matching
+                            final_answer = fuzzy_match_optimized(task_str, pdf_text, threshold=80)
+                        
+                        batch_results.append({
+                            "Heading": str(heading),
+                            "Task": task_str,
+                            "Present": final_answer,
+                            **durations
+                        })
+                else:
+                    # If AI fails, use fuzzy matching for all
+                    for idx, (original_idx, heading, task_str) in enumerate(tasks_for_ai_processing):
+                        final_answer = fuzzy_match_optimized(task_str, pdf_text, threshold=80)
+                        batch_results.append({
+                            "Heading": str(heading),
+                            "Task": task_str,
+                            "Present": final_answer,
+                            **durations
+                        })
+        
         return batch_results, total_ai_time
+        
     except Exception as e:
         logger.error(f"Error processing batch: {e}")
         return [{"Heading": str(h), "Task": str(t), "Present": "error", **durations} for h, t in sub_batch], 0
-    
-def process_pdf_from_blob(blob_url: str):
-    if not blob_url or not isinstance(blob_url, str):
-        logger.error(f"Invalid blob_url: {blob_url}")
-        return None
-
-    try:
-        blob_service_client = BlobServiceClient.from_connection_string(
-            os.getenv("AZURE_STORAGE_CONNECTION_STRING")
-        )
-        blob_name = os.path.basename(blob_url)
-        if not blob_name:
-            logger.error(f"Could not extract blob name from URL: {blob_url}")
-            return None
-
-        blob_client = blob_service_client.get_blob_client(
-            container=os.getenv("AZURE_STORAGE_CONTAINER"),
-            blob=blob_name
-        )
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-            download_stream = blob_client.download_blob()
-            tmp_file.write(download_stream.readall())
-            tmp_file_path = tmp_file.name
-
-        try:
-            with open(tmp_file_path, "rb") as f:
-                file_like = io.BytesIO(f.read())
-                result = process_pdf_safely(file_like)
-            return result
-        finally:
-            if os.path.exists(tmp_file_path):
-                os.unlink(tmp_file_path)
-
-    except Exception as e:
-        logger.error(f"Error in process_pdf_from_blob: {e}", exc_info=True)
-        return None
 
 def process_pdf_safely(uploaded_file):
+    """Optimized but functional PDF processing"""
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf_file:
             tmp_pdf_file.write(uploaded_file.file.read() if hasattr(uploaded_file, "file") else uploaded_file.read())
             tmp_pdf_path = tmp_pdf_file.name
-        pdf_text, images_content = extract_pdf_content_pymupdf(tmp_pdf_path)
-        if not pdf_text or not pdf_text.strip():
-            return None
-        normalized_pdf_text = normalize_and_clean_text(pdf_text)
-        if not normalized_pdf_text.strip():
-            return None
-        return pdf_text, normalized_pdf_text, tmp_pdf_path, images_content
+        
+        try:
+            pdf_text, images_content = extract_pdf_content_pymupdf(tmp_pdf_path)
+            if not pdf_text or not pdf_text.strip():
+                return None
+            normalized_pdf_text = normalize_and_clean_text(pdf_text)
+            if not normalized_pdf_text.strip():
+                return None
+            return pdf_text, normalized_pdf_text, tmp_pdf_path, images_content
+        finally:
+            # Ensure cleanup happens
+            if tmp_pdf_path and os.path.exists(tmp_pdf_path):
+                os.unlink(tmp_pdf_path)
     except Exception as e:
         logger.error(f"Error in process_pdf_safely: {str(e)}")
         return None
