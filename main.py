@@ -2,11 +2,13 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Form, Dep
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
+from azure.storage.blob import BlobServiceClient
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from starlette.middleware.sessions import SessionMiddleware
 from utils import (
     process_pdf_safely, extract_durations_optimized, store_chunks_in_cosmos,
     process_batch_with_fallback, create_excel_with_formatting, generate_document_id,
-    task_batches, normalize_and_clean_text, collection, check_existing_chunks  # ADD THIS
+    task_batches, normalize_and_clean_text, collection, check_existing_chunks,process_pdf_from_blob
 )
 import os
 import logging
@@ -216,29 +218,46 @@ def get_initials(name: str) -> str:
     else:
         return "UN"
 
+from io import BytesIO
+
 @app.post("/upload")
 async def upload_pdf(
     file: UploadFile = File(...),
     request: Request = None
 ):
-    """Handle PDF upload and processing"""
-    # Check authentication
+    """Handle PDF upload, store in Azure Blob, and process"""
     user = get_current_user(request)
-    logger.info(f"File upload request from user: {user['username']}")
+    logger.info(f"File upload request from user: {user['username']}, file: {file.filename}, size: {file.size} bytes")
     
-    # Start timing the TOTAL processing (not just AI time)
     total_processing_start_time = time.time()
-    total_ai_time = 0  # Track AI-specific processing time
+    total_ai_time = 0
     
     try:
         if not file.filename.endswith(".pdf"):
             raise HTTPException(status_code=400, detail="Only PDF files are allowed")
 
+        # Read file content once
+        file_content = await file.read()
+        if not file_content or len(file_content) == 0:
+            logger.error("Uploaded file is empty")
+            raise HTTPException(status_code=400, detail="Uploaded PDF file is empty")
+
+        # Upload to Azure Blob Storage
+        blob_service_client = BlobServiceClient.from_connection_string(os.getenv("AZURE_STORAGE_CONNECTION_STRING"))
+        container_client = blob_service_client.get_container_client(os.getenv("AZURE_STORAGE_CONTAINER"))
+        blob_name = f"{user['username']}_{int(time.time())}_{file.filename}"
+        blob_client = container_client.upload_blob(name=blob_name, data=file_content, overwrite=True)
+        blob_properties = blob_client.get_blob_properties()
+        logger.info(f"Uploaded {file.filename} to Blob: {blob_client.url}, size: {blob_properties.size} bytes")
+
+        # Create a new UploadFile object with the same content
+        file = UploadFile(filename=file.filename, file=BytesIO(file_content))
+        
         loop = asyncio.get_event_loop()
         processing_result = await loop.run_in_executor(None, lambda: process_pdf_safely(file))
         if processing_result is None:
-            raise HTTPException(status_code=400, detail="No readable content found in the PDF")
-
+            raise HTTPException(status_code=400, detail="No readable content found in the PDF. It may be a scanned document or corrupted.")
+        
         pdf_text, normalized_pdf_text, tmp_pdf_path, images_content = processing_result
         
         # Extract durations and get AI time
@@ -246,7 +265,7 @@ async def upload_pdf(
         total_ai_time += durations_ai_time
         logger.info("Extracting phase durations...")
 
-        from langchain.text_splitter import RecursiveCharacterTextSplitter
+        
         splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=50)
         chunks = splitter.split_text(pdf_text) if pdf_text.strip() else []
         if not chunks:
@@ -272,12 +291,10 @@ async def upload_pdf(
         if not all_tasks:
             raise HTTPException(status_code=400, detail="No valid tasks found to process")
 
-        batch_size = 20  # Increased batch size for fewer API calls
+        batch_size = 20
         task_batches_split = [all_tasks[i:i + batch_size] for i in range(0, len(all_tasks), batch_size)]
 
         results = []
-
-        # Process batches sequentially but optimized
         for idx, batch in enumerate(task_batches_split):
             logger.info(f"Processing batch {idx + 1} of {len(task_batches_split)}")
             result, batch_ai_time = await loop.run_in_executor(
@@ -300,7 +317,6 @@ async def upload_pdf(
         if df.empty:
             raise HTTPException(status_code=500, detail="All tasks failed processing")
 
-        # Count tasks per phase dynamically before creating Excel
         phase_task_counts = count_tasks_per_phase(df)
         
         with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp_excel:
@@ -310,10 +326,7 @@ async def upload_pdf(
         if tmp_pdf_path and os.path.exists(tmp_pdf_path):
             os.unlink(tmp_pdf_path)
 
-        # Calculate TOTAL processing time (from start to finish)
         total_processing_time = time.time() - total_processing_start_time
-        
-        # Format total processing time for display
         if total_processing_time >= 60:
             minutes = int(total_processing_time // 60)
             seconds = int(total_processing_time % 60)
@@ -321,7 +334,6 @@ async def upload_pdf(
         else:
             formatted_total_time = f"{total_processing_time:.1f} sec"
         
-        # Format AI time for internal tracking (not displayed)
         if total_ai_time >= 60:
             minutes = int(total_ai_time // 60)
             seconds = int(total_ai_time % 60)
@@ -329,15 +341,13 @@ async def upload_pdf(
         else:
             formatted_ai_time = f"{total_ai_time:.1f} sec"
         
-        # Create a copy of token_stats with processing time
         from utils import token_stats
         session_token_stats = token_stats.copy()
-        session_token_stats["processing_time"] = total_ai_time  # Use actual AI time for internal tracking
-        session_token_stats["formatted_ai_time"] = formatted_ai_time  # Keep for internal reference
-        session_token_stats["total_processing_time"] = total_processing_time  # Add total time
-        session_token_stats["formatted_total_time"] = formatted_total_time  # Add formatted total time
+        session_token_stats["processing_time"] = total_ai_time
+        session_token_stats["formatted_ai_time"] = formatted_ai_time
+        session_token_stats["total_processing_time"] = total_processing_time
+        session_token_stats["formatted_total_time"] = formatted_total_time
         
-        # Update user token stats with this session's data
         await loop.run_in_executor(
             None, 
             lambda: update_user_token_stats(
@@ -347,23 +357,18 @@ async def upload_pdf(
                 user.get('email', 'Unknown'), 
                 user.get('login_time', 'Unknown'), 
                 "Not logged out", 
-                total_ai_time,  # Use actual AI time for internal tracking
-                total_processing_time  # Pass total processing time
+                total_ai_time,
+                total_processing_time
             )
         )
         
-        # Log token usage
         await loop.run_in_executor(None, lambda: log_user_token_usage(user['username']))
 
-        # Calculate metadata for frontend using actual counts
         completed_tasks = len(df[df['Present'] == 'yes'])
         total_tasks = len(df)
         phases_with_durations = len([d for d in durations.values() if d and str(d).strip()])
-        
-        # Count unique headings that have tasks
         unique_headings = df['Heading'].nunique()
         
-        # Prepare metadata with actual phase task counts - use TOTAL processing time
         metadata = {
             "durations": durations,
             "completedTasks": completed_tasks,
@@ -372,15 +377,13 @@ async def upload_pdf(
             "phasesWithDurations": phases_with_durations,
             "uniqueHeadings": unique_headings,
             "phaseTaskCounts": phase_task_counts,
-            "totalProcessingTime": formatted_total_time,  # Changed from aiResponseTime to totalProcessingTime
-            "aiResponseTime": formatted_ai_time  # Keep for internal reference if needed
+            "totalProcessingTime": formatted_total_time,
+            "aiResponseTime": formatted_ai_time
         }
 
-        # Read the Excel file and encode as base64
         with open(tmp_excel_path, 'rb') as f:
             excel_data = base64.b64encode(f.read()).decode('utf-8')
 
-        # Clean up temporary file
         if os.path.exists(tmp_excel_path):
             os.unlink(tmp_excel_path)
 
@@ -390,7 +393,8 @@ async def upload_pdf(
             "status": "success",
             "metadata": metadata,
             "file": excel_data,
-            "filename": "AI-Generated_SOW_Document.xlsx"
+            "filename": "AI-Generated_SOW_Document.xlsx",
+            "blob_url": blob_url
         })
 
     except HTTPException:
