@@ -1,14 +1,14 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Form, Depends
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.background import BackgroundTask
-from azure.storage.blob import BlobServiceClient
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 from starlette.middleware.sessions import SessionMiddleware
 from utils import (
     process_pdf_safely, extract_durations_optimized, store_chunks_in_cosmos,
-    process_batch_with_fallback, create_excel_with_formatting, generate_document_id,
-    task_batches, normalize_and_clean_text, collection, check_existing_chunks,process_pdf_from_blob
+    process_batch_with_fallback_accurate, create_excel_with_formatting, generate_document_id,
+    task_batches, normalize_and_clean_text, collection, check_existing_chunks,
+    test_azure_openai_connection, test_cosmos_connection
 )
 import os
 import logging
@@ -35,6 +35,15 @@ from utils import update_user_token_stats, create_token_report_excel, get_user_t
 load_dotenv()
 
 app = FastAPI(title="Project Plan Agent")
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Simple user database (in production, use a proper database)
 users = {
@@ -92,7 +101,7 @@ async def login(
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
-    browser_time: str = Form(None)  # ⬅ add this line
+    browser_time: str = Form(None)
 ):
     """Handle login form submission"""
     logger.info(f"Login attempt for username: {username}")
@@ -106,7 +115,7 @@ async def login(
             "username": username,
             "name": users[username]["name"],
             "role": users[username]["role"],
-            "login_time": login_time  # Add proper timestamp
+            "login_time": login_time
         }
         
         # Set session expiration (optional - 24 hours)
@@ -218,105 +227,83 @@ def get_initials(name: str) -> str:
     else:
         return "UN"
 
-from io import BytesIO
-
 @app.post("/upload")
 async def upload_pdf(
     file: UploadFile = File(...),
     request: Request = None
 ):
-    blob_url = None
-    
-    """Handle PDF upload, store in Azure Blob, and process"""
+    """OPTIMIZED: Handle PDF upload with TPM fixes"""
     user = get_current_user(request)
-    logger.info(f"File upload request from user: {user['username']}, file: {file.filename}, size: {file.size} bytes")
+    logger.info(f"OPTIMIZED: File upload from user: {user['username']} for file: {file.filename}")
     
     total_processing_start_time = time.time()
     total_ai_time = 0
-
     
     try:
-        if not file.filename.endswith(".pdf"):
-            raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+        # Validation
+        if not file.filename or not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
-        # Read file content once
         file_content = await file.read()
-        if not file_content or len(file_content) == 0:
-            logger.error("Uploaded file is empty")
-            raise HTTPException(status_code=400, detail="Uploaded PDF file is empty")
-
-        # Upload to Azure Blob Storage
-        blob_service_client = BlobServiceClient.from_connection_string(os.getenv("AZURE_STORAGE_CONNECTION_STRING"))
-        container_client = blob_service_client.get_container_client(os.getenv("AZURE_STORAGE_CONTAINER"))
-        blob_name = f"{user['username']}_{int(time.time())}_{file.filename}"
+        if len(file_content) == 0:
+            raise HTTPException(status_code=400, detail="Empty file")
+        if len(file_content) > 20 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="File too large (max 20MB)")
         
+        await file.seek(0)
+        
+        # Test Azure services
         try:
-            blob_client = container_client.upload_blob(
-                name=blob_name, data=file_content, overwrite=True
-            )
-            blob_url = blob_client.url
-            logger.info(f"Uploaded to blob: {blob_url}")
-        except Exception as upload_error:
-            logger.error(f"Blob upload failed: {upload_error}")
-            raise HTTPException(500, "Failed to upload to Azure Blob Storage")
+            from utils import llm
+            test_response = llm.invoke("Say 'connection test' only.")
+            logger.info("Azure OpenAI connectivity verified")
+        except Exception as e:
+            raise HTTPException(status_code=503, detail="AI service unavailable.")
 
-        # === NOW SAFE TO USE blob_url ===
-        if not blob_url:
-            raise HTTPException(500, "Blob URL not generated")
-
+        # Create a copy of current token stats BEFORE processing
+        from utils import token_stats
+        initial_token_stats = token_stats.copy()
+        logger.info(f"Initial token stats: {initial_token_stats}")
+        
         loop = asyncio.get_event_loop()
-        processing_result = await loop.run_in_executor(
-            None,
-            lambda: process_pdf_from_blob(blob_url)
-        )
-
-        if not processing_result:
-            raise HTTPException(400, "No readable content in PDF")
+        
+        # Step 1: Extract PDF content
+        logger.info("Step 1: Extracting PDF content...")
+        processing_result = await loop.run_in_executor(None, lambda: process_pdf_safely(file))
+        if processing_result is None:
+            raise HTTPException(status_code=400, detail="No readable content found in the PDF")
 
         pdf_text, normalized_pdf_text, tmp_pdf_path, images_content = processing_result
-
-
-        # Extract durations and get AI time
+        
+        # Step 2: Extract durations
+        logger.info("Step 2: Extracting phase durations...")
         durations, durations_ai_time = await loop.run_in_executor(None, lambda: extract_durations_optimized(pdf_text))
         total_ai_time += durations_ai_time
-        logger.info("Extracting phase durations...")
 
-        
-        splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=50)
-        chunks = splitter.split_text(pdf_text) if pdf_text.strip() else []
-        if not chunks:
-            raise HTTPException(status_code=400, detail="No valid text content to process")
-
-        document_id = generate_document_id(pdf_text)
-        logger.info(f"Processing document with ID: {document_id}")
-
-        # Check if document already processed before storing
-        existing_doc = await loop.run_in_executor(None, lambda: check_existing_chunks(document_id))
-        if not existing_doc:
-            success = await loop.run_in_executor(None, lambda: store_chunks_in_cosmos(chunks, images_content, document_id))
-            if not success:
-                raise HTTPException(status_code=500, detail="Failed to store document in Cosmos DB")
-        else:
-            logger.info(f"Document {document_id} already exists in database, skipping storage")
-
-        stored_count = collection.count_documents({"document_id": document_id})
-        logger.info(f"Found {stored_count} chunks in database")
-
-        logger.info("Analyzing tasks in SOW...")
+        # Step 3: Process tasks with OPTIMIZED function
+        logger.info("Step 3: Analyzing tasks with optimized detection...")
         all_tasks = [(str(heading), str(task)) for heading, tasks in task_batches.items() for task in tasks if task and task.strip()]
         if not all_tasks:
             raise HTTPException(status_code=400, detail="No valid tasks found to process")
 
-        batch_size = 20
+        # Use smaller batch size for better TPM management
+        batch_size = 15  # Reduced from 25
         task_batches_split = [all_tasks[i:i + batch_size] for i in range(0, len(all_tasks), batch_size)]
 
         results = []
+
+        # Process batches with OPTIMIZED function and delays
         for idx, batch in enumerate(task_batches_split):
             logger.info(f"Processing batch {idx + 1} of {len(task_batches_split)}")
+            
+            # Add delay between batches to manage TPM
+            if idx > 0:
+                await asyncio.sleep(3)  # 3 second delay between batches
+            
             result, batch_ai_time = await loop.run_in_executor(
                 None, 
-                lambda: process_batch_with_fallback(
-                    batch, document_id, durations, normalized_pdf_text, pdf_text
+                lambda: process_batch_with_fallback_accurate(
+                    batch, durations, normalized_pdf_text, pdf_text
                 )
             )
             total_ai_time += batch_ai_time
@@ -333,16 +320,23 @@ async def upload_pdf(
         if df.empty:
             raise HTTPException(status_code=500, detail="All tasks failed processing")
 
+        # Count tasks per phase
         phase_task_counts = count_tasks_per_phase(df)
         
+        # Create Excel file
+        logger.info("Creating Excel report...")
         with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp_excel:
             await loop.run_in_executor(None, lambda: create_excel_with_formatting(df, durations, tmp_excel.name, activity_column_width=50))
             tmp_excel_path = tmp_excel.name
 
+        # Cleanup
         if tmp_pdf_path and os.path.exists(tmp_pdf_path):
             os.unlink(tmp_pdf_path)
 
+        # Calculate processing time
         total_processing_time = time.time() - total_processing_start_time
+        
+        # Format times
         if total_processing_time >= 60:
             minutes = int(total_processing_time // 60)
             seconds = int(total_processing_time % 60)
@@ -350,39 +344,34 @@ async def upload_pdf(
         else:
             formatted_total_time = f"{total_processing_time:.1f} sec"
         
-        if total_ai_time >= 60:
-            minutes = int(total_ai_time // 60)
-            seconds = int(total_ai_time % 60)
-            formatted_ai_time = f"{minutes} min {seconds} sec"
-        else:
-            formatted_ai_time = f"{total_ai_time:.1f} sec"
+        # Calculate actual token usage during this session
+        current_token_stats = token_stats.copy()
+        session_token_stats = {
+            "llm_input_tokens": current_token_stats["llm_input_tokens"] - initial_token_stats["llm_input_tokens"],
+            "llm_output_tokens": current_token_stats["llm_output_tokens"] - initial_token_stats["llm_output_tokens"],
+            "embedding_tokens": current_token_stats["embedding_tokens"] - initial_token_stats["embedding_tokens"],
+            "llm_calls": current_token_stats["llm_calls"] - initial_token_stats["llm_calls"],
+            "embedding_calls": current_token_stats["embedding_calls"] - initial_token_stats["embedding_calls"],
+        }
         
-        from utils import token_stats
-        session_token_stats = token_stats.copy()
-        session_token_stats["processing_time"] = total_ai_time
-        session_token_stats["formatted_ai_time"] = formatted_ai_time
-        session_token_stats["total_processing_time"] = total_processing_time
-        session_token_stats["formatted_total_time"] = formatted_total_time
+        logger.info(f"Session token usage: {session_token_stats}")
         
-        await loop.run_in_executor(
-            None, 
-            lambda: update_user_token_stats(
-                session_token_stats, 
-                file.filename, 
-                user['username'], 
-                user.get('email', 'Unknown'), 
-                user.get('login_time', 'Unknown'), 
-                "Not logged out", 
-                total_ai_time,
-                total_processing_time
-            )
+        # Update user token stats with the session data
+        login_time = user.get('login_time', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        update_user_token_stats(
+            session_token_stats,
+            file.filename,
+            user['username'],
+            user.get('email', 'Unknown'),
+            login_time,
+            "Not logged out",
+            total_ai_time,
+            total_processing_time
         )
         
-        await loop.run_in_executor(None, lambda: log_user_token_usage(user['username']))
-
+        # Prepare metadata
         completed_tasks = len(df[df['Present'] == 'yes'])
         total_tasks = len(df)
-        phases_with_durations = len([d for d in durations.values() if d and str(d).strip()])
         unique_headings = df['Heading'].nunique()
         
         metadata = {
@@ -390,36 +379,36 @@ async def upload_pdf(
             "completedTasks": completed_tasks,
             "totalTasks": total_tasks,
             "totalPhases": unique_headings,
-            "phasesWithDurations": phases_with_durations,
+            "phasesWithDurations": len([d for d in durations.values() if d and str(d).strip()]),
             "uniqueHeadings": unique_headings,
             "phaseTaskCounts": phase_task_counts,
             "totalProcessingTime": formatted_total_time,
-            "aiResponseTime": formatted_ai_time
+            "aiResponseTime": f"{total_ai_time:.1f} sec"
         }
 
+        # Read the Excel file
         with open(tmp_excel_path, 'rb') as f:
             excel_data = base64.b64encode(f.read()).decode('utf-8')
 
+        # Cleanup
         if os.path.exists(tmp_excel_path):
             os.unlink(tmp_excel_path)
 
-        logger.info(f"Successfully processed PDF for user: {user['username']}")
-        logger.info(f"Total Processing Time: {formatted_total_time}, AI Time: {formatted_ai_time}")
+        logger.info(f"SUCCESS: Optimized processing completed in {formatted_total_time}")
+        logger.info(f"Task distribution: {completed_tasks}/{total_tasks} completed tasks")
         return JSONResponse({
             "status": "success",
             "metadata": metadata,
             "file": excel_data,
-            "filename": "AI-Generated_SOW_Document.xlsx",
-            "blob_url": blob_url
+            "filename": "AI-Generated_SOW_Document.xlsx"
         })
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error processing PDF: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to process PDF: {str(e)}")
+        logger.error(f"Error processing PDF: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
     
-# NEW: Add function to count tasks per phase
 def count_tasks_per_phase(df):
     """Count tasks per phase dynamically from the DataFrame"""
     phase_counts = {}
@@ -433,6 +422,84 @@ def count_tasks_per_phase(df):
         }
     
     return phase_counts
+
+@app.get("/debug/config")
+async def debug_config(request: Request):
+    """Comprehensive debug endpoint to check configuration"""
+    try:
+        user = get_current_user(request)
+    except:
+        user = {"username": "anonymous", "role": "unknown"}
+    
+    config_status = {
+        "service": "SOW Analyzer",
+        "user": user['username'],
+        "environment": "Azure",
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    # Check environment variables (without exposing secrets)
+    env_vars = {
+        "AZURE_OPENAI_ENDPOINT": bool(os.getenv("AZURE_OPENAI_ENDPOINT")),
+        "AZURE_OPENAI_API_KEY": "***" if os.getenv("AZURE_OPENAI_API_KEY") else None,
+        "AZURE_OPENAI_API_VERSION": os.getenv("AZURE_OPENAI_API_VERSION"),
+        "AZURE_OPENAI_CHAT_DEPLOYMENT": os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT"),
+        "AZURE_OPENAI_EMBEDDING_DEPLOYMENT": os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT"),
+        "COSMOS_URI": "***" if os.getenv("COSMOS_URI") else None,
+        "COSMOS_DB": os.getenv("COSMOS_DB"),
+        "COSMOS_COLLECTION": os.getenv("COSMOS_COLLECTION"),
+    }
+    config_status["environment_variables"] = env_vars
+    
+    # Test Azure OpenAI
+    try:
+        openai_test = test_azure_openai_connection()
+        config_status["azure_openai"] = openai_test
+    except Exception as e:
+        config_status["azure_openai"] = {
+            "status": "failed",
+            "error": str(e)
+        }
+    
+    # Test Cosmos DB
+    try:
+        cosmos_test = test_cosmos_connection()
+        config_status["cosmos_db"] = cosmos_test
+    except Exception as e:
+        config_status["cosmos_db"] = {
+            "status": "failed",
+            "error": str(e)
+        }
+    
+    return JSONResponse(config_status)
+
+@app.get("/debug/token-stats")
+async def debug_token_stats(request: Request):
+    """Debug endpoint to check token statistics"""
+    user = get_current_user(request)
+    
+    from utils import user_token_stats, token_stats
+    
+    debug_info = {
+        "current_user": user['username'],
+        "global_token_stats": token_stats,
+        "user_token_stats_keys": list(user_token_stats.keys()) if user_token_stats else [],
+        "current_user_in_stats": user['username'] in user_token_stats if user_token_stats else False,
+    }
+    
+    if user['username'] in user_token_stats:
+        debug_info["user_stats"] = user_token_stats[user['username']]
+    
+    return JSONResponse(debug_info)
+
+@app.get("/health")
+async def health_check():
+    """Basic health check endpoint"""
+    return {
+        "status": "healthy", 
+        "service": "Project Plan Agent",
+        "timestamp": datetime.now().isoformat()
+    }
 
 @app.get("/dashboard")
 async def dashboard_page(request: Request):
@@ -779,7 +846,6 @@ async def get_token_summary(request: Request):
         logger.error(f"Error getting token summary: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to get token summary")
     
-
 @app.get("/api/token-sessions")
 async def get_token_sessions(request: Request):
     """Get token usage session data for dashboard - returns ALL session records"""
@@ -882,7 +948,7 @@ async def get_token_sessions(request: Request):
     except Exception as e:
         logger.error(f"Error getting token sessions: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to get token session data")
-        
+            
 @app.get("/back-to-main")
 async def back_to_main(request: Request):
     """Redirect back to main landing page"""
@@ -890,17 +956,12 @@ async def back_to_main(request: Request):
     logger.info(f"User {user['username']} navigating back to main page")
     return RedirectResponse(url="/", status_code=302)
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "service": "Project Plan Agent"}
-
 # Add middleware after route definitions to ensure proper ordering
 @app.middleware("http")
 async def check_session_validity(request: Request, call_next):
     """Middleware to check session validity"""
     # Skip session check for login page and static files
-    if request.url.path in ["/login", "/static", "/health"] or request.url.path.startswith("/static/"):
+    if request.url.path in ["/login", "/static", "/health", "/debug/config", "/debug/token-stats"] or request.url.path.startswith("/static/"):
         return await call_next(request)
     
     # Check if session exists and has user data
