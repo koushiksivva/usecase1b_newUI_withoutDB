@@ -1,3 +1,4 @@
+from azure.storage.blob import BlobServiceClient
 import os
 import io
 import re
@@ -18,8 +19,8 @@ from dotenv import load_dotenv
 # Langchain + Azure OpenAI
 from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings
 from langchain_core.prompts import PromptTemplate
-from langchain_core.messages import HumanMessage
-from langchain.text_splitter import RecursiveCharacterTextSplitter 
+from langchain.schema import HumanMessage
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.utils import get_column_letter
@@ -125,33 +126,19 @@ def get_query_embedding(query: str):
 def cached_doc_embedding(text: str):
     return embedding_model.embed_documents([text])[0]
 
-# def check_tpm_limit():
-#     current_time = time.time()
-#     elapsed_minutes = (current_time - token_stats["start_time"]) / 60
-#     if elapsed_minutes > 0:
-#         current_tpm = (token_stats["llm_input_tokens"] + token_stats["llm_output_tokens"]) / elapsed_minutes
-#         if current_tpm > (TPM_LIMIT * TPM_THRESHOLD):
-#             sleep_time = 60 - (elapsed_minutes % 60)
-#             logger.info(f"Approaching TPM limit ({current_tpm:.0f}). Pausing for {sleep_time:.1f}s")
-#             time.sleep(sleep_time)
-#             token_stats["start_time"] = time.time()
-
 def check_tpm_limit():
     current_time = time.time()
-    elapsed_seconds = current_time - token_stats["start_time"]
-    elapsed_minutes = elapsed_seconds / 60
+    elapsed_minutes = (current_time - token_stats["start_time"]) / 60
     if elapsed_minutes > 0:
         current_tpm = (token_stats["llm_input_tokens"] + token_stats["llm_output_tokens"]) / elapsed_minutes
         if current_tpm > (TPM_LIMIT * TPM_THRESHOLD):
-            sleep_time = 60 - (elapsed_seconds % 60)  # Sleep until next minute
-            logger.info(f"Approaching TPM limit ({current_tpm:.0f}). Pausing for {sleep_time:.1f}s")
-            time.sleep(sleep_time)
-            # Reset token stats for the next minute
-            token_stats["llm_input_tokens"] = 0
-            token_stats["llm_output_tokens"] = 0
+            # Sleep **seconds**, not minutes
+            sleep_seconds = max(1, 60 - (elapsed_minutes * 60 % 60))
+            logger.info(f"TPM limit → sleep {sleep_seconds:.1f}s")
+            time.sleep(sleep_seconds)
+            # Reset for the *next* minute window
             token_stats["start_time"] = time.time()
-
-
+            token_stats["llm_input_tokens"] = token_stats["llm_output_tokens"] = 0
 
 def count_tokens(text: str, model: str = "gpt-4o"):
     if not text or not isinstance(text, str):
@@ -703,6 +690,26 @@ def process_batch_with_fallback(sub_batch, document_id, durations, normalized_pd
     except Exception as e:
         logger.error(f"Error processing batch: {e}")
         return [{"Heading": str(h), "Task": str(t), "Present": "error", **durations} for h, t in sub_batch], 0
+    
+def process_pdf_from_blob(blob_url: str):
+    # Download blob to temp file
+    blob_service_client = BlobServiceClient.from_connection_string(os.getenv("AZURE_STORAGE_CONNECTION_STRING"))
+    blob_client = blob_service_client.get_blob_client(container=os.getenv("AZURE_STORAGE_CONTAINER"), blob=os.path.basename(blob_url))
+    
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+        download_stream = blob_client.download_blob()
+        tmp_file.write(download_stream.readall())
+        tmp_file_path = tmp_file.name
+    
+    try:
+        # Process with existing function
+        with open(tmp_file_path, "rb") as f:
+            file_like = io.BytesIO(f.read())
+            result = process_pdf_safely(file_like)
+        return result
+    finally:
+        os.unlink(tmp_file_path)  # Clean up temp file
+
 def process_pdf_safely(uploaded_file):
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf_file:
@@ -1094,7 +1101,3 @@ def create_token_report_excel(username=None):
     except Exception as e:
         logger.error(f"Error creating token report: {str(e)}", exc_info=True)
         return None
-
-
-
-
