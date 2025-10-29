@@ -225,6 +225,8 @@ async def upload_pdf(
     file: UploadFile = File(...),
     request: Request = None
 ):
+    blob_url = None
+    
     """Handle PDF upload, store in Azure Blob, and process"""
     user = get_current_user(request)
     logger.info(f"File upload request from user: {user['username']}, file: {file.filename}, size: {file.size} bytes")
@@ -232,7 +234,6 @@ async def upload_pdf(
     total_processing_start_time = time.time()
     total_ai_time = 0
 
-    blob_url = None
     
     try:
         if not file.filename.endswith(".pdf"):
@@ -248,20 +249,33 @@ async def upload_pdf(
         blob_service_client = BlobServiceClient.from_connection_string(os.getenv("AZURE_STORAGE_CONNECTION_STRING"))
         container_client = blob_service_client.get_container_client(os.getenv("AZURE_STORAGE_CONTAINER"))
         blob_name = f"{user['username']}_{int(time.time())}_{file.filename}"
-        blob_client = container_client.upload_blob(name=blob_name, data=file_content, overwrite=True)
-        blob_properties = blob_client.get_blob_properties()
-        logger.info(f"Uploaded {file.filename} to Blob: {blob_client.url}, size: {blob_properties.size} bytes")
+        
+        try:
+            blob_client = container_client.upload_blob(
+                name=blob_name, data=file_content, overwrite=True
+            )
+            blob_url = blob_client.url
+            logger.info(f"Uploaded to blob: {blob_url}")
+        except Exception as upload_error:
+            logger.error(f"Blob upload failed: {upload_error}")
+            raise HTTPException(500, "Failed to upload to Azure Blob Storage")
 
-        # Create a new UploadFile object with the same content
-        file = UploadFile(filename=file.filename, file=BytesIO(file_content))
-        
+        # === NOW SAFE TO USE blob_url ===
+        if not blob_url:
+            raise HTTPException(500, "Blob URL not generated")
+
         loop = asyncio.get_event_loop()
-        processing_result = await loop.run_in_executor(None, lambda: process_pdf_from_blob(blob_url))
-        if processing_result is None:
-            raise HTTPException(status_code=400, detail="No readable content found in the PDF. It may be a scanned document or corrupted.")
-        
+        processing_result = await loop.run_in_executor(
+            None,
+            lambda: process_pdf_from_blob(blob_url)
+        )
+
+        if not processing_result:
+            raise HTTPException(400, "No readable content in PDF")
+
         pdf_text, normalized_pdf_text, tmp_pdf_path, images_content = processing_result
-        
+
+
         # Extract durations and get AI time
         durations, durations_ai_time = await loop.run_in_executor(None, lambda: extract_durations_optimized(pdf_text))
         total_ai_time += durations_ai_time
