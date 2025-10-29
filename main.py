@@ -231,6 +231,8 @@ async def upload_pdf(
     
     total_processing_start_time = time.time()
     total_ai_time = 0
+
+    blob_url = None
     
     try:
         if not file.filename.endswith(".pdf"):
@@ -254,7 +256,7 @@ async def upload_pdf(
         file = UploadFile(filename=file.filename, file=BytesIO(file_content))
         
         loop = asyncio.get_event_loop()
-        processing_result = await loop.run_in_executor(None, lambda: process_pdf_safely(file))
+        processing_result = await loop.run_in_executor(None, lambda: process_pdf_from_blob(blob_url))
         if processing_result is None:
             raise HTTPException(status_code=400, detail="No readable content found in the PDF. It may be a scanned document or corrupted.")
         
