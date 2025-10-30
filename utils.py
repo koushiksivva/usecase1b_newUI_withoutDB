@@ -367,10 +367,10 @@ def analyze_image_for_durations(image_b64):
         Be concise and focus only on duration information.
         """
         input_tokens = count_tokens(prompt, model="gpt-4o")
-        
+       
         # Start timing for vision AI processing
         ai_start_time = time.time()
-        
+       
         token_stats["llm_input_tokens"] += input_tokens
         token_stats["llm_calls"] += 1
         messages = [
@@ -384,19 +384,18 @@ def analyze_image_for_durations(image_b64):
         response = vision_llm(messages)
         output_tokens = count_tokens(response.content, model="gpt-4o")
         token_stats["llm_output_tokens"] += output_tokens
-        
+       
         # Calculate vision AI processing time
         ai_processing_time = time.time() - ai_start_time
-        
+       
         # FIX: Ensure we return a string description and processing time
         description = response.content if response.content else "No timeline data found"
         return description, ai_processing_time  # Return tuple consistently
-        
+       
     except Exception as e:
         logger.warning(f"Vision analysis failed: {e}")
         return "Image analysis failed", 0  # Return tuple consistently even on error
-
-
+    
 def generate_document_id(pdf_content):
     if not pdf_content:
         pdf_content = ""
@@ -1059,4 +1058,5 @@ def create_token_report_excel(username=None):
     except Exception as e:
         logger.error(f"Error creating token report: {str(e)}", exc_info=True)
         return None
+
 
