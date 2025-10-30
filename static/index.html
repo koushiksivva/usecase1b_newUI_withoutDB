@@ -2377,7 +2377,6 @@
                             <th>Phase</th>
                             <th>Duration</th>
                             <th>Tasks Completed</th>
-                            // <th>Status</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -2400,7 +2399,6 @@
                                 <td>${phase}</td>
                                 <td>${phaseDuration}</td>
                                 <td>${phaseData.completed_tasks}</td>
-                                <td>${phaseData.completed_tasks === phaseData.total_tasks ? 'Complete' : 'In Progress'}</td>
                             </tr>
                         `;
                     }
@@ -2522,6 +2520,7 @@
     </script>
 </body>
 </html>
+
 
 
 
