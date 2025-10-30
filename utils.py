@@ -351,8 +351,51 @@ def extract_pdf_content_pymupdf(pdf_path):
         return "", []    
 
 def analyze_image_for_durations(image_b64):
-    """Skip image analysis to reduce latency"""
-    return "Image analysis skipped for performance", 0
+    try:
+        check_tpm_limit()
+        prompt = """
+        Analyze this image for project timeline or Gantt chart information. Look for:
+        1. Phase durations (PREP, EXPLORE, REALIZE, DEPLOY, RUN phases)
+        2. Sprint durations or counts
+        3. Timeline bars showing months/weeks
+        4. Any duration numbers or time spans
+        If this appears to be a timeline/Gantt chart:
+        - Count bar lengths or time spans
+        - Sum sprint durations (e.g., 7 sprints × 3 weeks = 21 weeks)
+        - Convert to months if needed (4 weeks ≈ 1 month)
+        Output format: "Phase: Duration" for each phase found, or "No timeline data" if none found.
+        Be concise and focus only on duration information.
+        """
+        input_tokens = count_tokens(prompt, model="gpt-4o")
+        
+        # Start timing for vision AI processing
+        ai_start_time = time.time()
+        
+        token_stats["llm_input_tokens"] += input_tokens
+        token_stats["llm_calls"] += 1
+        messages = [
+            HumanMessage(
+                content=[
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}}
+                ]
+            )
+        ]
+        response = vision_llm(messages)
+        output_tokens = count_tokens(response.content, model="gpt-4o")
+        token_stats["llm_output_tokens"] += output_tokens
+        
+        # Calculate vision AI processing time
+        ai_processing_time = time.time() - ai_start_time
+        
+        # FIX: Ensure we return a string description and processing time
+        description = response.content if response.content else "No timeline data found"
+        return description, ai_processing_time  # Return tuple consistently
+        
+    except Exception as e:
+        logger.warning(f"Vision analysis failed: {e}")
+        return "Image analysis failed", 0  # Return tuple consistently even on error
+
 
 def generate_document_id(pdf_content):
     if not pdf_content:
@@ -1016,3 +1059,4 @@ def create_token_report_excel(username=None):
     except Exception as e:
         logger.error(f"Error creating token report: {str(e)}", exc_info=True)
         return None
+
